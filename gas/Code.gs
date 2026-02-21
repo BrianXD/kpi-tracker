@@ -9,8 +9,7 @@
  *    - 誰可以存取：所有人（含匿名者）
  * 4. 複製部署 URL 貼到前端的 VITE_GAS_URL
  *
- * 工作表名稱對應：
- *   使用者、系統別、子模組、提問方式、員工資料、問題清單記錄
+ * 工作表名稱：使用者、系統別、子模組、提問方式、員工資料、問題清單記錄
  */
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
@@ -22,24 +21,33 @@ function isEnabled(val) {
   return s === "是" || s === "y" || s === "yes" || s === "true";
 }
 
-// ── GET ──────────────────────────────────────────────────────────────────────
+// Sheet 名稱對應
+const SHEET_MAP = {
+  users: "使用者",
+  systems: "系統別",
+  subModules: "子模組",
+  questionTypes: "提問方式",
+  employees: "員工資料",
+};
+
+// ── GET ───────────────────────────────────────────────────────────────────────
 
 function doGet(e) {
   const action = e.parameter.action;
   let result;
-
   try {
     if (action === "getUsers") {
       result = getUsers();
     } else if (action === "getFormOptions") {
       result = getFormOptions();
+    } else if (action === "getAdminSheet") {
+      result = getAdminSheet(e.parameter.sheet);
     } else {
-      result = { error: "unknown action" };
+      result = { error: "unknown action: " + action };
     }
   } catch (err) {
     result = { error: String(err) };
   }
-
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(
     ContentService.MimeType.JSON,
   );
@@ -48,7 +56,7 @@ function doGet(e) {
 function getUsers() {
   const sheet = SS.getSheetByName("使用者");
   const rows = sheet.getDataRange().getValues();
-  // 欄：ID, 使用者工號, 使用者姓名, LOGIN ID, Password, 是否啟用
+  // 欄：id, 使用者工號, 使用者姓名, LOGIN ID, Password, 是否啟用, 是否為管理者
   return rows
     .slice(1)
     .filter((r) => isEnabled(r[5]))
@@ -57,6 +65,7 @@ function getUsers() {
       empId: String(r[1]),
       name: String(r[2]),
       loginId: String(r[3]),
+      isAdmin: isEnabled(r[6]),
     }));
 }
 
@@ -72,7 +81,7 @@ function getFormOptions() {
 function getSystems() {
   const sheet = SS.getSheetByName("系統別");
   const rows = sheet.getDataRange().getValues();
-  // 欄：ID, 系統別, 是否開啟, 排序
+  // id, 系統別, 是否開啟, 排序
   return rows
     .slice(1)
     .filter((r) => isEnabled(r[2]))
@@ -87,7 +96,7 @@ function getSystems() {
 function getSubModules() {
   const sheet = SS.getSheetByName("子模組");
   const rows = sheet.getDataRange().getValues();
-  // 欄：ID, 父系統, 子模組, 是否開啟, 排序
+  // id, 父系統, 子模組, 是否開啟, 排序
   return rows
     .slice(1)
     .filter((r) => isEnabled(r[3]))
@@ -103,7 +112,7 @@ function getSubModules() {
 function getQuestionTypes() {
   const sheet = SS.getSheetByName("提問方式");
   const rows = sheet.getDataRange().getValues();
-  // 欄：ID, 提問方式, 是否開啟, 排序
+  // id, 提問方式, 是否開啟, 排序
   return rows
     .slice(1)
     .filter((r) => isEnabled(r[2]))
@@ -118,7 +127,7 @@ function getQuestionTypes() {
 function getEmployees() {
   const sheet = SS.getSheetByName("員工資料");
   const rows = sheet.getDataRange().getValues();
-  // 欄：ID, 提問人工號, 提問人姓名, 是否開啟
+  // id, 提問人工號, 提問人姓名, 是否開啟
   return rows
     .slice(1)
     .filter((r) => isEnabled(r[3]))
@@ -129,47 +138,121 @@ function getEmployees() {
     }));
 }
 
-// ── POST ─────────────────────────────────────────────────────────────────────
+// ── Admin: getAdminSheet (回傳完整原始資料，不過濾) ───────────────────────────
+
+function getAdminSheet(sheetKey) {
+  const sheetName = SHEET_MAP[sheetKey];
+  if (!sheetName) return { error: "unknown sheet: " + sheetKey };
+  const sheet = SS.getSheetByName(sheetName);
+  if (!sheet) return { error: "sheet not found: " + sheetName };
+  const all = sheet.getDataRange().getValues();
+  if (all.length === 0) return { headers: [], data: [] };
+  const headers = all[0].map(String);
+  const data = all.slice(1).map((row, i) => {
+    const obj = { _rowIndex: i + 2 }; // 1-indexed, row 1 = header
+    headers.forEach((h, j) => {
+      obj[h] = row[j];
+    });
+    return obj;
+  });
+  return { headers, data };
+}
+
+// ── POST ──────────────────────────────────────────────────────────────────────
 
 function doPost(e) {
   let result;
   try {
     const data = JSON.parse(e.postData.contents);
-    appendRecord(data);
-    result = { status: "ok" };
+    const action = data.action;
+
+    if (action === "appendRecord" || !action) {
+      // 原有的工作記錄送出
+      appendRecord(data);
+      result = { status: "ok" };
+    } else if (action === "addAdminRow") {
+      addAdminRow(data.sheet, data.rowData, data.headers);
+      result = { status: "ok" };
+    } else if (action === "saveAdminRow") {
+      saveAdminRow(data.sheet, data.rowIndex, data.rowData, data.headers);
+      result = { status: "ok" };
+    } else if (action === "deleteAdminRow") {
+      deleteAdminRow(data.sheet, data.rowIndex);
+      result = { status: "ok" };
+    } else {
+      result = { status: "error", message: "unknown action: " + action };
+    }
   } catch (err) {
     result = { status: "error", message: String(err) };
   }
-
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(
     ContentService.MimeType.JSON,
   );
 }
 
-function appendRecord(data) {
-  const sheet = SS.getSheetByName("問題清單記錄");
-  const lastRow = sheet.getLastRow();
+// ── Admin CRUD ─────────────────────────────────────────────────────────────────
+
+function addAdminRow(sheetKey, rowData, headers) {
+  const sheet = SS.getSheetByName(SHEET_MAP[sheetKey]);
   // 自動 ID
+  const lastRow = sheet.getLastRow();
   const newId =
     lastRow < 1 ? 1 : (Number(sheet.getRange(lastRow, 1).getValue()) || 0) + 1;
 
+  // 取得完整 headers（含 id）
+  const fullHeaders = sheet
+    .getRange(1, 1, 1, sheet.getLastColumn())
+    .getValues()[0]
+    .map(String);
+  const values = fullHeaders.map((h) => {
+    if (h === "id") return newId;
+    return rowData[h] !== undefined ? rowData[h] : "";
+  });
+  sheet.appendRow(values);
+}
+
+function saveAdminRow(sheetKey, rowIndex, rowData, headers) {
+  const sheet = SS.getSheetByName(SHEET_MAP[sheetKey]);
+  const fullHeaders = sheet
+    .getRange(1, 1, 1, sheet.getLastColumn())
+    .getValues()[0]
+    .map(String);
+  const values = fullHeaders.map((h) => {
+    return rowData[h] !== undefined
+      ? rowData[h]
+      : sheet.getRange(rowIndex, fullHeaders.indexOf(h) + 1).getValue();
+  });
+  sheet.getRange(rowIndex, 1, 1, values.length).setValues([values]);
+}
+
+function deleteAdminRow(sheetKey, rowIndex) {
+  const sheet = SS.getSheetByName(SHEET_MAP[sheetKey]);
+  sheet.deleteRow(rowIndex);
+}
+
+// ── 工作記錄寫入 ───────────────────────────────────────────────────────────────
+
+function appendRecord(data) {
+  const sheet = SS.getSheetByName("問題清單記錄");
+  const lastRow = sheet.getLastRow();
+  const newId =
+    lastRow < 1 ? 1 : (Number(sheet.getRange(lastRow, 1).getValue()) || 0) + 1;
   const now = new Date();
   const LEVEL_MAP = { HIGH: "高", MID: "中", LOW: "低" };
-
   sheet.appendRow([
-    newId, // ID
-    data.system, // 系統別
-    data.subModule, // 子模組
-    data.handler, // 處理人員姓名
-    data.questioner, // 提問人員
-    LEVEL_MAP[data.difficulty] || "", // 難度
-    LEVEL_MAP[data.priority] || "", // 優先權
-    data.questionDate, // 提問日期
-    data.questionType, // 提問方式
-    data.isDone ? "是" : "否", // 是否完成
-    data.closedDate || "", // 結案日期
-    data.minutes || "", // 處理分鐘數
-    data.note || "", // 備註
-    now, // 建立日期時間
+    newId,
+    data.system,
+    data.subModule,
+    data.handler,
+    data.questioner,
+    LEVEL_MAP[data.difficulty] || "",
+    LEVEL_MAP[data.priority] || "",
+    data.questionDate,
+    data.questionType,
+    data.isDone ? "是" : "否",
+    data.closedDate || "",
+    data.minutes || "",
+    data.note || "",
+    now,
   ]);
 }

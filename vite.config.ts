@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import type { IncomingMessage, ServerResponse } from 'http'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -11,26 +12,63 @@ export default defineConfig(({ mode }) => {
       {
         name: 'gas-proxy',
         configureServer(server) {
-          // server-side proxy：Node.js follow redirect 不受 CORS 限制
-          server.middlewares.use('/gas-proxy', async (req, res) => {
-            if (!gasUrl) {
-              res.statusCode = 500
-              res.end(JSON.stringify({ error: 'VITE_GAS_URL not set' }))
-              return
-            }
-            const search = req.url?.split('?')[1] ?? ''
-            const targetUrl = gasUrl + (search ? `?${search}` : '')
-            try {
-              const response = await fetch(targetUrl, { redirect: 'follow' })
-              const text = await response.text()
-              res.setHeader('Content-Type', 'application/json')
-              res.setHeader('Access-Control-Allow-Origin', '*')
-              res.end(text)
-            } catch (err) {
-              res.statusCode = 500
-              res.end(JSON.stringify({ error: String(err) }))
-            }
-          })
+          server.middlewares.use(
+            '/gas-proxy',
+            async (req: IncomingMessage, res: ServerResponse) => {
+              const method = req.method ?? 'GET'
+
+              // CORS preflight
+              if (method === 'OPTIONS') {
+                res.setHeader('Access-Control-Allow-Origin', '*')
+                res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+                res.statusCode = 204
+                res.end()
+                return
+              }
+
+              if (!gasUrl) {
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: 'VITE_GAS_URL not set' }))
+                return
+              }
+
+              const setHeaders = () => {
+                res.setHeader('Content-Type', 'application/json')
+                res.setHeader('Access-Control-Allow-Origin', '*')
+              }
+
+              try {
+                if (method === 'GET') {
+                  const search = req.url?.split('?')[1] ?? ''
+                  const targetUrl = gasUrl + (search ? `?${search}` : '')
+                  const response = await fetch(targetUrl, { redirect: 'follow' })
+                  setHeaders()
+                  res.end(await response.text())
+                } else if (method === 'POST') {
+                  const body = await new Promise<string>((resolve) => {
+                    let data = ''
+                    req.on('data', (chunk: Buffer) => { data += chunk.toString() })
+                    req.on('end', () => resolve(data))
+                  })
+                  const response = await fetch(gasUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body,
+                    redirect: 'follow',
+                  })
+                  setHeaders()
+                  res.end(await response.text())
+                } else {
+                  res.statusCode = 405
+                  res.end(JSON.stringify({ error: 'Method not allowed' }))
+                }
+              } catch (err) {
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: String(err) }))
+              }
+            },
+          )
         },
       },
     ],

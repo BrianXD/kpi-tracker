@@ -3,6 +3,7 @@ export interface User {
   empId: string
   name: string
   loginId: string
+  isAdmin: boolean
 }
 
 export interface System {
@@ -52,4 +53,18 @@ export interface WorkItemPayload {
   closedDate?: string
   minutes?: number
   note?: string
+}
+
+// ── Admin types ─────────────────────────────────────────────────────────────
+
+export type AdminSheetKey = 'users' | 'systems' | 'subModules' | 'questionTypes' | 'employees'
+
+export interface AdminRow {
+  _rowIndex: number
+  [key: string]: string | number | boolean
+}
+
+export interface AdminSheetData {
+  headers: string[]
+  data: AdminRow[]
 }

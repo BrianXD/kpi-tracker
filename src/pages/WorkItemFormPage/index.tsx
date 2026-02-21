@@ -200,8 +200,31 @@ export default function WorkItemFormPage() {
 
         <Link to="/" className="back-link">← 切換使用者</Link>
 
-        <div className="user-badge">
-          👤 {user.name}（{user.empId}）
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <div className="user-badge" style={{ margin: 0 }}>
+            👤 {user.name}（{user.empId}）
+          </div>
+          {user.isAdmin && (
+            <Link
+              to="/admin"
+              state={{ user }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '4px 12px',
+                borderRadius: 20,
+                background: 'rgba(249,168,37,0.12)',
+                border: '1px solid rgba(249,168,37,0.3)',
+                color: 'var(--mid)',
+                fontSize: 13,
+                textDecoration: 'none',
+                fontWeight: 500,
+              }}
+            >
+              ⚙ 系統管理
+            </Link>
+          )}
         </div>
 
         {status === 'success' && (
