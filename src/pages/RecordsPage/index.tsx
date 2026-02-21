@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLocation, Link } from 'react-router-dom'
+import AppLayout from '../../components/AppLayout'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { useForm, Controller, type Control } from 'react-hook-form'
@@ -58,8 +59,17 @@ function QTypeIconDisplay({ name }: { name: string }) {
       </svg>
     )
   }
-  const EMOJI: Record<string, string> = { '電話': '☎️', '現場': '🏢', 'Slack': '🔧', 'Zoom': '📹', '其它': '✏️' }
-  return <span style={{ fontSize: 18 }}>{EMOJI[name] ?? '💬'}</span>
+  const EMOJI: Record<string, string> = {
+    '電話': '☎️',
+    '現場': '🤝',
+    '口述': '🗣️',
+    'Slack': '📬',
+    'Zoom': '📹',
+    '對講': '📢',
+    'WhatsApp': '📱',
+    '其它': '✏️',
+  }
+  return <span style={{ fontSize: 18 }}>{EMOJI[name] ?? '📝'}</span>
 }
 
 
@@ -421,10 +431,10 @@ export default function RecordsPage() {
   const hasFilter = fPerson || fSystem || fSubModule || fQuestioner || fQType || fDifficulty || fPriority || fIsDone || fFrom || fTo
 
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg)', padding: '20px 16px' }}>
+    <AppLayout user={user}>
       {/* Toast */}
       {toast && (
-        <div className={`alert alert-${toast.type}`} style={{ position: 'fixed', top: 16, right: 16, zIndex: 999, minWidth: 220 }}>
+        <div className={`alert alert-${toast.type}`} style={{ position: 'fixed', top: 16, right: 280, zIndex: 999, minWidth: 220 }}>
           {toast.type === 'success' ? '✅' : '⚠'} {toast.msg}
         </div>
       )}
@@ -434,19 +444,14 @@ export default function RecordsPage() {
         <EditRecordModal record={editRecord} user={user} onSave={handleSave} onClose={() => setEditRecord(null)} />
       )}
 
-      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <Link to="/form" state={{ user }} className="back-link" style={{ margin: 0 }}>← 返回</Link>
-          <div className="app-logo" style={{ margin: 0, flex: 1 }}>
-            <div className="logo-icon">📋</div>
-            <div className="logo-text">
-              <h1>工作記錄查詢</h1>
-              <p>{user.isAdmin ? '管理者：可查詢所有人員記錄' : `${user.name} 的記錄`}</p>
-            </div>
-          </div>
-          <div className="user-badge" style={{ margin: 0 }}>{user.isAdmin ? '👑' : '👤'} {user.name}</div>
-        </div>
+      {/* Page header */}
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', lineHeight: 1.3 }}>查詢工作記錄</h2>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+          {user?.isAdmin ? '管理者模式：可看規所有人員的記錄' : `顯示 ${user?.name} 的工作記錄`}
+        </p>
+      </div>
+
 
         {/* Filter panel */}
         <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', marginBottom: 16 }}>
@@ -593,7 +598,6 @@ export default function RecordsPage() {
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </AppLayout>
   )
 }

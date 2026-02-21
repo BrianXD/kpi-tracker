@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import type { User, AdminSheetKey, AdminSheetData, AdminRow } from '../../types'
+import AppLayout from '../../components/AppLayout'
 import {
   getAdminSheet,
   addAdminRow,
@@ -233,56 +234,46 @@ export default function AdminPage() {
   const rows = sheetData?.data ?? []
 
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg)', padding: '20px 16px' }}>
+    <AppLayout user={user}>
       {/* Toast */}
       {toast && (
-        <div
-          className={`alert alert-${toast.type}`}
-          style={{ position: 'fixed', top: 16, right: 16, zIndex: 999, minWidth: 220 }}
-        >
+        <div className={`alert alert-${toast.type}`}
+          style={{ position: 'fixed', top: 16, right: 280, zIndex: 999, minWidth: 220 }}>
           {toast.type === 'success' ? '✅' : '⚠'} {toast.msg}
         </div>
       )}
 
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <Link to="/form" state={{ user }} className="back-link" style={{ margin: 0 }}>← 返回</Link>
-          <div className="app-logo" style={{ margin: 0, flex: 1 }}>
-            <div className="logo-icon">⚙</div>
-            <div className="logo-text">
-              <h1>系統管理</h1>
-              <p>資料維護介面</p>
-            </div>
-          </div>
-          <div className="user-badge" style={{ margin: 0 }}>👑 {user.name}</div>
-        </div>
+      {/* Page header */}
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', lineHeight: 1.3 }}>系統管理</h2>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>資料維護介面 · 管理者專用</p>
+      </div>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-          {SHEET_TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveSheet(tab.key)}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid',
-                borderColor: activeSheet === tab.key ? 'var(--accent)' : 'var(--border)',
-                background: activeSheet === tab.key ? 'var(--accent-dim)' : 'var(--surface)',
-                color: activeSheet === tab.key ? 'var(--accent-hover)' : 'var(--text-muted)',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                fontSize: 13,
-                fontWeight: activeSheet === tab.key ? 600 : 400,
-                transition: 'all 0.15s',
-              }}
-            >
-              {tab.emoji} {tab.label}
-            </button>
-          ))}
-        </div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {SHEET_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveSheet(tab.key)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid',
+              borderColor: activeSheet === tab.key ? 'var(--accent)' : 'var(--border)',
+              background: activeSheet === tab.key ? 'var(--accent-dim)' : 'var(--surface)',
+              color: activeSheet === tab.key ? 'var(--accent-hover)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              fontWeight: activeSheet === tab.key ? 600 : 400,
+              transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+            }}
+          >
+            {tab.emoji} {tab.label}
+          </button>
+        ))}
+      </div>
 
         {/* Table card */}
         <div
@@ -452,8 +443,7 @@ export default function AdminPage() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </AppLayout>
   )
 }
 

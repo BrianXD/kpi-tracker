@@ -8,6 +8,7 @@ import 'react-datepicker/dist/react-datepicker.css'
 import type { User, Level } from '../../types'
 import { submitWorkItem } from '../../services/api'
 import { useFormOptions } from '../../hooks/useFormOptions'
+import AppLayout from '../../components/AppLayout'
 
 // ── Schema ───────────────────────────────────────────────────────────────────
 const schema = z.object({
@@ -34,7 +35,7 @@ function toDatetimeLocal(d: Date) {
 
 const levelLabels: Record<Level, string> = { HIGH: '高', MID: '中', LOW: '低' }
 
-// 提問方式 Icon 元件（支援 Email/Teams/LINE SVG）
+// 提問方式 Icon 元件（支援 Email/Teams/LINE SVG + 各自独立 emoji）
 function QTypeIconDisplay({ name }: { name: string }) {
   if (name === 'Email') {
     return (
@@ -63,8 +64,18 @@ function QTypeIconDisplay({ name }: { name: string }) {
       </svg>
     )
   }
-  const EMOJI: Record<string, string> = { '電話': '☎️', '現場': '🏢', 'Slack': '🔧', 'Zoom': '📹', '其它': '✏️' }
-  return <span style={{ fontSize: 18 }}>{EMOJI[name] ?? '💬'}</span>
+  // 每個名稱對應唯一 emoji
+  const EMOJI: Record<string, string> = {
+    '電話': '☎️',   // 耶筒
+    '現場': '🤝',   // 面對面
+    '口述': '🗣️',   // 口述說明
+    'Slack': '📬',   // 信件夺
+    'Zoom': '📹',   // 視訊
+    '對講': '📢',   // 廣播
+    'WhatsApp': '📱', // 手機訊息
+    '其它': '✏️',   // 其它
+  }
+  return <span style={{ fontSize: 18 }}>{EMOJI[name] ?? '📝'}</span>
 }
 
 // ── LevelButtons ─────────────────────────────────────────────────────────────
@@ -273,272 +284,224 @@ export default function WorkItemFormPage() {
   }
 
   return (
-    <div className="page-wrapper" style={{ alignItems: 'flex-start', paddingTop: 24 }}>
-      <div className="card">
-        <div className="app-logo">
-          <div className="logo-icon">📋</div>
-          <div className="logo-text">
-            <h1>工作記錄</h1>
-            <p>KPI Tracker</p>
+    <AppLayout user={user}>
+      {/* Success overlay */}
+      {status === 'success' && (
+        <div className="success-overlay">
+          <div className="success-card">
+            <span className="success-emoji">✅</span>
+            <p>記錄已成功送出！</p>
+            <small>表單已清空，可繼續新增項目</small>
           </div>
         </div>
+      )}
 
-        <Link to="/" className="back-link">← 切換使用者</Link>
+      {/* Page header */}
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', lineHeight: 1.3 }}>新增工作記錄</h2>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>填寫本次處理的工作項目，記錄將同步至 Google Sheets</p>
+      </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <div className="user-badge" style={{ margin: 0 }}>
-            👤 {user.name}（{user.empId}）
-          </div>
-          {user.isAdmin && (
-            <Link
-              to="/admin"
-              state={{ user }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '4px 12px',
-                borderRadius: 20,
-                background: 'rgba(249,168,37,0.12)',
-                border: '1px solid rgba(249,168,37,0.3)',
-                color: 'var(--mid)',
-                fontSize: 13,
-                textDecoration: 'none',
-                fontWeight: 500,
-              }}
-            >
-              ⚙ 系統管理
-            </Link>
-          )}
-          <Link
-            to="/records"
-            state={{ user }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '4px 12px',
-              borderRadius: 20,
-              background: 'rgba(124,111,247,0.12)',
-              border: '1px solid rgba(124,111,247,0.3)',
-              color: 'var(--accent-hover)',
-              fontSize: 13,
-              textDecoration: 'none',
-              fontWeight: 500,
-            }}
-          >
-            📋 查詢記錄
-          </Link>
+      {/* Inline alerts */}
+      {status === 'error' && <div className="alert alert-error">⚠ {errMsg}</div>}
+      {errMsg && status === 'idle' && <div className="alert alert-error">⚠ {errMsg}</div>}
+      {optError && <div className="alert alert-error">⚠ 下拉資料載入失敗：{optError}</div>}
+
+      {optLoading ? (
+        <div className="spinner-wrap">
+          <div className="spinner" />
+          <span>載入下拉資料中…</span>
         </div>
+      ) : (
+        <form onSubmit={handleSubmit(onSubmit)} noValidate>
 
+              <p className="section-divider">系統資訊</p>
 
-        {/* 送出成功 overlay */}
-        {status === 'success' && (
-          <div className="success-overlay">
-            <div className="success-card">
-              <span className="success-emoji">✅</span>
-              <p>記錄已成功送出！</p>
-              <small>表單已清空，可繼續新增項目</small>
-            </div>
-          </div>
-        )}
-        {status === 'error' && (
-          <div className="alert alert-error">⚠ {errMsg}</div>
-        )}
-        {errMsg && status === 'idle' && (
-          <div className="alert alert-error">⚠ {errMsg}</div>
-        )}
-        {optError && (
-          <div className="alert alert-error">⚠ 下拉資料載入失敗：{optError}</div>
-        )}
+              <div className="form-grid-wide">
+                <div className="form-group">
+                  <label htmlFor="system">系統別 <span className="required">*</span></label>
+                  <select id="system" autoFocus {...register('system')}>
+                    <option value="" disabled>— 請選擇 —</option>
+                    {options?.systems.map((s) => (
+                      <option key={s.id} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                  {errors.system && <span className="field-error">⚠ {errors.system.message}</span>}
+                </div>
 
-        {optLoading ? (
-          <div className="spinner-wrap">
-            <div className="spinner" />
-            <span>載入下拉資料中…</span>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
+                <div className="form-group">
+                  <label htmlFor="subModule">子模組 <span className="required">*</span></label>
+                  {isSystemOther ? (
+                    <input
+                      id="subModule"
+                      type="text"
+                      placeholder="請輸入子模組名稱…"
+                      value={subModuleInput}
+                      onChange={(e) => {
+                        setSubModuleInput(e.target.value)
+                        setValue('subModule', e.target.value)
+                      }}
+                    />
+                  ) : (
+                    <select id="subModule" {...register('subModule')} disabled={!watchedSystem}>
+                      <option value="" disabled>— 請先選系統別 —</option>
+                      {filteredSubModules.map((sm) => (
+                        <option key={sm.id} value={sm.name}>{sm.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  {errors.subModule && <span className="field-error">⚠ {errors.subModule.message}</span>}
+                </div>
+              </div>
 
-            <p className="section-divider">系統資訊</p>
+              <p className="section-divider">提問資訊</p>
 
-            <div className="form-group">
-              <label htmlFor="system">系統別 <span className="required">*</span></label>
-              <select id="system" autoFocus {...register('system')}>
-                <option value="" disabled>— 請選擇 —</option>
-                {options?.systems.map((s) => (
-                  <option key={s.id} value={s.name}>{s.name}</option>
-                ))}
-              </select>
-              {errors.system && <span className="field-error">⚠ {errors.system.message}</span>}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="subModule">子模組 <span className="required">*</span></label>
-              {isSystemOther ? (
-                <input
-                  id="subModule"
-                  type="text"
-                  placeholder="請輸入子模組名稱"
-                  value={subModuleInput}
-                  onChange={(e) => {
-                    setSubModuleInput(e.target.value)
-                    setValue('subModule', e.target.value)
-                  }}
+              <div className="form-group">
+                <label>提問方式 <span className="required">*</span></label>
+                <QuestionTypeButtons
+                  control={control}
+                  options={options?.questionTypes}
+                  qtypeInput={questionTypeInput}
+                  onQtypeInput={setQuestionTypeInput}
                 />
-              ) : (
-                <select id="subModule" {...register('subModule')} disabled={!watchedSystem}>
-                  <option value="" disabled>— 請先選系統別 —</option>
-                  {filteredSubModules.map((sm) => (
-                    <option key={sm.id} value={sm.name}>{sm.name}</option>
-                  ))}
-                </select>
-              )}
-              {errors.subModule && <span className="field-error">⚠ {errors.subModule.message}</span>}
-            </div>
+                {errors.questionType && <span className="field-error">⚠ {errors.questionType.message}</span>}
+              </div>
 
-            <p className="section-divider">提問資訊</p>
+              <div className="form-grid-wide">
+                <div className="form-group">
+                  <label htmlFor="questioner">提問人員 <span className="required">*</span></label>
+                  <select id="questioner" {...register('questioner')}>
+                    <option value="" disabled>— 請選擇 —</option>
+                    {options?.employees.map((emp) => (
+                      <option key={emp.id} value={emp.name}>{emp.name}（{emp.empId}）</option>
+                    ))}
+                  </select>
+                  {errors.questioner && <span className="field-error">⚠ {errors.questioner.message}</span>}
+                </div>
 
-            <div className="form-group">
-              <label>提問方式 <span className="required">*</span></label>
-              <QuestionTypeButtons
-                control={control}
-                options={options?.questionTypes}
-                qtypeInput={questionTypeInput}
-                onQtypeInput={setQuestionTypeInput}
-              />
-              {errors.questionType && <span className="field-error">⚠ {errors.questionType.message}</span>}
-            </div>
-
-
-            <div className="form-group">
-              <label htmlFor="questioner">提問人員 <span className="required">*</span></label>
-              <select id="questioner" {...register('questioner')}>
-                <option value="" disabled>— 請選擇 —</option>
-                {options?.employees.map((emp) => (
-                  <option key={emp.id} value={emp.name}>{emp.name}（{emp.empId}）</option>
-                ))}
-              </select>
-              {errors.questioner && <span className="field-error">⚠ {errors.questioner.message}</span>}
-            </div>
-
-            <div className="form-group">
-              <label>發問日期時間 <span className="required">*</span></label>
-              <Controller
-                control={control}
-                name="questionDate"
-                render={({ field }) => (
-                  <DatePicker
-                    selected={field.value ? new Date(field.value) : null}
-                    onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
-                    showTimeSelect
-                    timeFormat="HH:mm"
-                    timeIntervals={5}
-                    dateFormat="yyyy/MM/dd HH:mm"
-                    placeholderText="請選擇日期時間"
-                    timeCaption="時間"
-                    className="dp-input-full"
-                    wrapperClassName="dp-wrapper-full"
+                <div className="form-group">
+                  <label>發問日期時間 <span className="required">*</span></label>
+                  <Controller
+                    control={control}
+                    name="questionDate"
+                    render={({ field }) => (
+                      <DatePicker
+                        selected={field.value ? new Date(field.value) : null}
+                        onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
+                        showTimeSelect
+                        timeFormat="HH:mm"
+                        timeIntervals={5}
+                        dateFormat="yyyy/MM/dd HH:mm"
+                        placeholderText="請選擇日期時間"
+                        timeCaption="時間"
+                        className="dp-input-full"
+                        wrapperClassName="dp-wrapper-full"
+                      />
+                    )}
                   />
-                )}
-              />
-              {errors.questionDate && <span className="field-error">⚠ {errors.questionDate.message}</span>}
-            </div>
-
-            <p className="section-divider">評級</p>
-
-            <div className="form-grid-2">
-              <div className="form-group">
-                <label>難度 <span className="required">*</span></label>
-                <LevelButtons name="difficulty" control={control} />
+                  {errors.questionDate && <span className="field-error">⚠ {errors.questionDate.message}</span>}
+                </div>
               </div>
-              <div className="form-group">
-                <label>優先權 <span className="required">*</span></label>
-                <LevelButtons name="priority" control={control} />
+
+              <p className="section-divider">評級</p>
+
+              <div className="form-grid-wide">
+                <div className="form-group">
+                  <label>難度 <span className="required">*</span></label>
+                  <LevelButtons name="difficulty" control={control} />
+                </div>
+                <div className="form-group">
+                  <label>優先權 <span className="required">*</span></label>
+                  <LevelButtons name="priority" control={control} />
+                </div>
               </div>
-            </div>
 
-            <p className="section-divider">完成狀態</p>
+              <p className="section-divider">完成狀態</p>
 
-            <div className="form-group">
-              <Controller
-                control={control}
-                name="isDone"
-                render={({ field }) => (
-                  <div
-                    className="toggle-row"
-                    onClick={() => field.onChange(!field.value)}
-                    role="switch"
-                    aria-checked={field.value}
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === ' ' || e.key === 'Enter') {
-                        e.preventDefault()
-                        field.onChange(!field.value)
-                      }
-                    }}
-                  >
-                    <span>{field.value ? '✅ 已完成' : '⏳ 尚未完成'}</span>
-                    <div className={`toggle-switch ${field.value ? 'on' : ''}`} />
+              <div className="form-grid-wide">
+                <div className="form-group">
+                  <Controller
+                    control={control}
+                    name="isDone"
+                    render={({ field }) => (
+                      <div
+                        className="toggle-row"
+                        onClick={() => field.onChange(!field.value)}
+                        role="switch"
+                        aria-checked={field.value}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === ' ' || e.key === 'Enter') {
+                            e.preventDefault()
+                            field.onChange(!field.value)
+                          }
+                        }}
+                      >
+                        <span>{field.value ? '✅ 已完成' : '⏳ 尚未完成'}</span>
+                        <div className={`toggle-switch ${field.value ? 'on' : ''}`} />
+                      </div>
+                    )}
+                  />
+                </div>
+
+                {watchedIsDone && (
+                  <div className="form-group">
+                    <label>結案日期時間</label>
+                    <Controller
+                      control={control}
+                      name="closedDate"
+                      render={({ field }) => (
+                        <DatePicker
+                          selected={field.value ? new Date(field.value) : null}
+                          onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
+                          showTimeSelect
+                          timeFormat="HH:mm"
+                          timeIntervals={5}
+                          dateFormat="yyyy/MM/dd HH:mm"
+                          placeholderText="請選擇日期時間"
+                          timeCaption="時間"
+                          className="dp-input-full"
+                          wrapperClassName="dp-wrapper-full"
+                        />
+                      )}
+                    />
                   </div>
                 )}
-              />
-            </div>
-
-            {watchedIsDone && (
-              <div className="form-group">
-                <label>結案日期時間</label>
-                <Controller
-                  control={control}
-                  name="closedDate"
-                  render={({ field }) => (
-                    <DatePicker
-                      selected={field.value ? new Date(field.value) : null}
-                      onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
-                      showTimeSelect
-                      timeFormat="HH:mm"
-                      timeIntervals={5}
-                      dateFormat="yyyy/MM/dd HH:mm"
-                      placeholderText="請選擇日期時間"
-                      timeCaption="時間"
-                      className="dp-input-full"
-                      wrapperClassName="dp-wrapper-full"
-                    />
-                  )}
-                />
               </div>
-            )}
 
-            <p className="section-divider">其他資訊</p>
+              <p className="section-divider">其他資訊</p>
 
-            <div className="form-group">
-              <label htmlFor="minutes">處理花費時間（分鐘）</label>
-              <input
-                id="minutes"
-                type="number"
-                min={0}
-                step={1}
-                placeholder="例：30"
-                {...register('minutes')}
-              />
-            </div>
+              <div className="form-grid-wide">
+                <div className="form-group">
+                  <label htmlFor="minutes">處理花費時間（分鐘）</label>
+                  <input
+                    id="minutes"
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="例：30"
+                    {...register('minutes')}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="note">備註</label>
+                  <input id="note" type="text" placeholder="選填備註說明…" {...register('note')} />
+                </div>
+              </div>
 
-            <div className="form-group">
-              <label htmlFor="note">備註</label>
-              <textarea id="note" rows={3} placeholder="選填備註說明…" {...register('note')} />
-            </div>
+              <div style={{ marginTop: 24 }}>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={status === 'submitting'}
+                  style={{ maxWidth: 320 }}
+                >
+                  {status === 'submitting' ? '送出中…' : '送出記錄 ✓'}
+                </button>
+              </div>
 
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={status === 'submitting'}
-            >
-              {status === 'submitting' ? '送出中…' : '送出記錄 ✓'}
-            </button>
-
-          </form>
-        )}
-      </div>
-    </div>
+            </form>
+          )}
+    </AppLayout>
   )
 }

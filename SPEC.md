@@ -1,6 +1,6 @@
 # KPI Tracker — 系統規格書
 
-> **版本**：1.2.0
+> **版本**：1.3.0
 > **最後更新**：2026-02-21
 > **維護方式**：本文件由 AI 自動維護，規格變更時同步更新
 
@@ -93,19 +93,19 @@ GAS Web App 回應 302 redirect，瀏覽器直接 fetch 會遇到 CORS 問題。
 
 **表單欄位規格**：
 
-| 欄位                 | 類型                | 來源                            | 必填 | 備註                                                 |
-| -------------------- | ------------------- | ------------------------------- | ---- | ---------------------------------------------------- |
-| 系統別               | 下拉選單            | Google Sheets「系統別」工作表   | ✅    | 選「其它」時子模組切換為文字輸入                     |
-| 子模組               | 下拉選單 / 文字輸入 | Google Sheets「子模組」工作表   | ✅    | 依系統別過濾；系統別為「其它」時變輸入框             |
-| 提問方式             | Icon 按鈕組         | Google Sheets「提問方式」工作表 | ✅    | 每個選項顯示 ICON + 名稱；選「其它」後下方出現文字框 |
-| 提問人員             | 下拉選單            | Google Sheets「員工資料」工作表 | ✅    | 顯示格式：`{姓名}（{工號}）`                         |
-| 發問日期時間         | datetime-local      | —                               | ✅    | 預設：當下日期時間                                   |
-| 難度                 | 三按鈕（高/中/低）  | —                               | ✅    | 預設：中                                             |
-| 優先權               | 三按鈕（高/中/低）  | —                               | ✅    | 預設：中                                             |
-| 是否完成             | Toggle 開關         | —                               | ✅    | 預設：否（⏳ 尚未完成）                               |
-| 結案日期時間         | datetime-local      | —                               | ❌    | 僅在「是否完成=是」時顯示                            |
-| 處理花費時間（分鐘） | number              | —                               | ❌    | 最小值 0，整數                                       |
-| 備註                 | textarea            | —                               | ❌    | 多行文字                                             |
+| 欄位                 | 類型                | 來源                            | 必填 | 備註                                                                           |
+| -------------------- | ------------------- | ------------------------------- | ---- | ------------------------------------------------------------------------------ |
+| 系統別               | 下拉選單            | Google Sheets「系統別」工作表   | ✅    | 選「其它」時子模組切換為文字輸入                                               |
+| 子模組               | 下拉選單 / 文字輸入 | Google Sheets「子模組」工作表   | ✅    | 依系統別過濾；系統別為「其它」時變輸入框                                       |
+| 提問方式             | Icon 按鈕組         | Google Sheets「提問方式」工作表 | ✅    | Email/Teams/LINE 使用 SVG 圖示；其餘各有唯一 emoji；選「其它」後下方出現文字框 |
+| 提問人員             | 下拉選單            | Google Sheets「員工資料」工作表 | ✅    | 顯示格式：`{姓名}（{工號}）`                                                   |
+| 發問日期時間         | react-datepicker    | —                               | ✅    | 24 小時制；預設：當下日期時間                                                  |
+| 難度                 | 三按鈕（高/中/低）  | —                               | ✅    | 預設：中                                                                       |
+| 優先權               | 三按鈕（高/中/低）  | —                               | ✅    | 預設：中                                                                       |
+| 是否完成             | Toggle 開關         | —                               | ✅    | 預設：否（⏳ 尚未完成）                                                         |
+| 結案日期時間         | react-datepicker    | —                               | ❌    | 僅在「是否完成=是」時顯示；24 小時制                                           |
+| 處理花費時間（分鐘） | number              | —                               | ❌    | 最小值 0，整數                                                                 |
+| 備註                 | text input          | —                               | ❌    | 單行文字（單行 input 取代 textarea）                                           |
 
 **表單驗證**：使用 `react-hook-form` + `zod`
 
@@ -114,9 +114,14 @@ GAS Web App 回應 302 redirect，瀏覽器直接 fetch 會遇到 CORS 問題。
 - 前端假設送出成功
 - 成功後：顯示全螢幕成功 overlay（動畫彈出，4 秒後消失）、清空表單（保留使用者身份）
 
-**導覽列**：
-- 管理者：顯示「⚙ 系統管理」橘色 Badge 連結
-- 所有人：顯示「📋 查詢記錄」紫色 Badge 連結
+**Layout（PC-first）**：
+- 使用 `AppLayout` 共用元件，呈現 **Sidebar（260px）+ Main** 兩欄結構
+- **Sidebar**：Logo、使用者 Card（姓名/工號/身份）、導覽選單（新增記錄 / 查詢記錄 / 系統管理）、底部切換使用者
+- **Main**：頁面標題 + 副標題、Alerts、表單
+- 表單欄位採 **form-grid-wide（2欄 grid）** 排列：系統別/子模組、提問人/日期、難度/優先權並排
+- **RWD**：< 900px 時 sidebar 收至頂部橫欄
+
+**導覽列**：已整合至 Sidebar，不再使用 Badge 連結
 
 ---
 
@@ -289,13 +294,15 @@ kpi-tracker/
 └── src/
     ├── main.tsx                  # 入口點
     ├── App.tsx                   # Router 設定（BrowserRouter）
-    ├── index.css                 # 設計系統（CSS variables）
+    ├── index.css                 # 設計系統（CSS variables + PC layout classes）
     ├── types/
     │   └── index.ts              # TypeScript 介面定義
     ├── services/
     │   └── api.ts                # GAS API 封裝（含 mock 資料）
     ├── hooks/
     │   └── useFormOptions.ts     # 下拉資料 fetching hook
+    ├── components/
+    │   └── AppLayout.tsx         # 共用 Sidebar + Main layout 元件
     └── pages/
         ├── LoginPage/
         │   └── index.tsx
@@ -387,3 +394,4 @@ kpi-tracker/
 | 2026-02-21 | 1.0.1 | GAS `isEnabled()` 函式新增支援 `Y`/`y`/`true`/`1` 等多種啟用值                                                                                                                                                |
 | 2026-02-21 | 1.1.0 | 管理者功能：使用者 Sheet 加 `是否為管理者` 欄；AdminPage CRUD；GAS admin 端點；gas-proxy POST 支援                                                                                                            |
 | 2026-02-21 | 1.2.0 | DataSheet 加入建立時間欄（GAS 自動填入）；RecordsPage 新增（查詢/篩選/排序/編輯/管理者可查全部）；提問方式改 icon 按鈕組；送出成功改動畫 overlay；日曆元件（react-datepicker 深色主題）；子模組父系統欄改下拉 |
+| 2026-02-21 | 1.3.0 | **PC-first Layout 重構**：建立共用 `AppLayout`（Sidebar 260px + Main）；WorkItemFormPage/RecordsPage/AdminPage 全面改用 AppLayout；表單欄位改 form-grid-wide 2-col；提問方式 icon 各自唯一（Email/Teams/LINE SVG + 其餘 emoji）；子模組篩選改下拉；備註改單行 input；CSS 全域加 color-scheme/touch-action/text-wrap/transition 明細 |
