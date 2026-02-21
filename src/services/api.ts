@@ -57,6 +57,30 @@ export async function submitWorkItem(payload: WorkItemPayload): Promise<void> {
   await gasPost({ action: 'appendRecord', ...payload })
 }
 
+export async function getRecords(
+  handlerName: string,
+  isAdmin: boolean,
+): Promise<import('../types').AdminRow[]> {
+  if (!GAS_PROD_URL) return []
+  return gasGet(
+    'getRecords',
+    `handler=${encodeURIComponent(handlerName)}&isAdmin=${isAdmin}`,
+  )
+}
+
+export async function updateRecord(
+  rowIndex: number,
+  payload: WorkItemPayload,
+): Promise<void> {
+  if (!GAS_PROD_URL) return
+  const result = await gasPost<{ status: string; message?: string }>({
+    action: 'updateRecord',
+    rowIndex,
+    rowData: payload,
+  })
+  if (result.status !== 'ok') throw new Error(result.message ?? '更新失敗')
+}
+
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
 export async function getAdminSheet(sheet: AdminSheetKey): Promise<AdminSheetData> {

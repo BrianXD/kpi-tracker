@@ -42,6 +42,8 @@ function doGet(e) {
       result = getFormOptions();
     } else if (action === "getAdminSheet") {
       result = getAdminSheet(e.parameter.sheet);
+    } else if (action === "getRecords") {
+      result = getRecords(e.parameter.handler, e.parameter.isAdmin);
     } else {
       result = { error: "unknown action: " + action };
     }
@@ -179,6 +181,9 @@ function doPost(e) {
     } else if (action === "deleteAdminRow") {
       deleteAdminRow(data.sheet, data.rowIndex);
       result = { status: "ok" };
+    } else if (action === "updateRecord") {
+      updateRecord(data.rowIndex, data.rowData);
+      result = { status: "ok" };
     } else {
       result = { status: "error", message: "unknown action: " + action };
     }
@@ -204,8 +209,10 @@ function addAdminRow(sheetKey, rowData, headers) {
     .getRange(1, 1, 1, sheet.getLastColumn())
     .getValues()[0]
     .map(String);
+  const now = new Date();
   const values = fullHeaders.map((h) => {
     if (h === "id") return newId;
+    if (h === "建立時間") return now; // 自動填入建立時間
     return rowData[h] !== undefined ? rowData[h] : "";
   });
   sheet.appendRow(values);
@@ -228,6 +235,63 @@ function saveAdminRow(sheetKey, rowIndex, rowData, headers) {
 function deleteAdminRow(sheetKey, rowIndex) {
   const sheet = SS.getSheetByName(SHEET_MAP[sheetKey]);
   sheet.deleteRow(rowIndex);
+}
+
+// ──// 工作記錄寫入 ───────────────────────────────────────────────────
+
+function getRecords(handlerName, isAdmin) {
+  const sheet = SS.getSheetByName("問題清單記錄");
+  const all = sheet.getDataRange().getValues();
+  if (all.length < 2) return [];
+  const headers = all[0].map(String);
+  return (
+    all
+      .slice(1)
+      .map((row, i) => {
+        const obj = { _rowIndex: i + 2 };
+        headers.forEach((h, j) => {
+          obj[h] = row[j];
+        });
+        return obj;
+      })
+      // isAdmin=true 則回傳全部，否則僅回傳該使用者記錄
+      .filter(
+        (obj) =>
+          isAdmin === "true" || String(obj["處理人員姓名"]) === handlerName,
+      )
+  );
+}
+
+function updateRecord(rowIndex, data) {
+  const sheet = SS.getSheetByName("問題清單記錄");
+  const headers = sheet
+    .getRange(1, 1, 1, sheet.getLastColumn())
+    .getValues()[0]
+    .map(String);
+  const LEVEL_MAP = { HIGH: "高", MID: "中", LOW: "低" };
+  const currentRow = sheet
+    .getRange(rowIndex, 1, 1, headers.length)
+    .getValues()[0];
+
+  const MAP = {
+    系統別: data.system,
+    子模組: data.subModule,
+    處理人員姓名: data.handler,
+    提問人員: data.questioner,
+    難度: LEVEL_MAP[data.difficulty] || data.difficulty,
+    優先權: LEVEL_MAP[data.priority] || data.priority,
+    提問日期: data.questionDate,
+    提問方式: data.questionType,
+    是否完成: data.isDone ? "是" : "否",
+    結案日期: data.closedDate || "",
+    處理分鐘數: data.minutes || "",
+    備註: data.note || "",
+  };
+
+  const values = headers.map((h, i) => {
+    return MAP[h] !== undefined ? MAP[h] : currentRow[i];
+  });
+  sheet.getRange(rowIndex, 1, 1, values.length).setValues([values]);
 }
 
 // ── 工作記錄寫入 ───────────────────────────────────────────────────────────────

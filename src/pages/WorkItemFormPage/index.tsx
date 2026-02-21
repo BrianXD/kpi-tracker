@@ -3,6 +3,8 @@ import { useLocation, Link } from 'react-router-dom'
 import { useForm, Controller, type Control } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
 import type { User, Level } from '../../types'
 import { submitWorkItem } from '../../services/api'
 import { useFormOptions } from '../../hooks/useFormOptions'
@@ -32,7 +34,40 @@ function toDatetimeLocal(d: Date) {
 
 const levelLabels: Record<Level, string> = { HIGH: '高', MID: '中', LOW: '低' }
 
-// ── LevelButtons (hoisted outside main component) ────────────────────────────
+// 提問方式 Icon 元件（支援 Email/Teams/LINE SVG）
+function QTypeIconDisplay({ name }: { name: string }) {
+  if (name === 'Email') {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="4" width="20" height="16" rx="2"/>
+        <polyline points="2 6 12 13 22 6"/>
+      </svg>
+    )
+  }
+  if (name === 'Teams') {
+    return (
+      <svg width="20" height="18" viewBox="0 0 32 32">
+        <circle cx="22" cy="8" r="5" fill="#7B83EB"/>
+        <text x="22" y="11.5" textAnchor="middle" fill="white" fontSize="7" fontWeight="bold" fontFamily="system-ui">T</text>
+        <rect x="2" y="12" width="22" height="18" rx="3" fill="#4B53BC"/>
+        <circle cx="13" cy="18" r="3" fill="white"/>
+        <path d="M7 27c0-3 2.7-5 6-5s6 2 6 5H7z" fill="white"/>
+      </svg>
+    )
+  }
+  if (name === 'LINE') {
+    return (
+      <svg width="18" height="18" viewBox="0 0 32 32">
+        <rect width="32" height="32" rx="8" fill="#00B900"/>
+        <path d="M27 14.5C27 9.8 22 6 16 6S5 9.8 5 14.5c0 4.15 3.68 7.62 8.66 8.37.34.07.8.22.92.5.1.26.07.66.03.92l-.14.85c-.04.26-.2 1 .87.55s5.88-3.47 8.03-5.94C26.4 17.87 27 16.26 27 14.5z" fill="white"/>
+      </svg>
+    )
+  }
+  const EMOJI: Record<string, string> = { '電話': '☎️', '現場': '🏢', 'Slack': '🔧', 'Zoom': '📹', '其它': '✏️' }
+  return <span style={{ fontSize: 18 }}>{EMOJI[name] ?? '💬'}</span>
+}
+
+// ── LevelButtons ─────────────────────────────────────────────────────────────
 function LevelButtons({
   name,
   control,
@@ -57,6 +92,56 @@ function LevelButtons({
             </button>
           ))}
         </div>
+      )}
+    />
+  )
+}
+
+// ── QuestionTypeButtons ───────────────────────────────────────────────────────
+function QuestionTypeButtons({
+  control,
+  options,
+  qtypeInput,
+  onQtypeInput,
+}: {
+  control: Control<FormValues>
+  options: import('../../types').QuestionType[] | undefined
+  qtypeInput: string
+  onQtypeInput: (v: string) => void
+}) {
+  return (
+    <Controller
+      control={control}
+      name="questionType"
+      render={({ field }) => (
+        <>
+          <div className="btn-group-qtype">
+            {(options ?? []).map((qt) => (
+              <button
+                key={qt.id}
+                type="button"
+                className={`btn-qtype${field.value === qt.name ? ' active' : ''}`}
+                onClick={() => {
+                  field.onChange(qt.name)
+                  if (qt.name !== '其它') onQtypeInput('')
+                }}
+              >
+                <span className="qtype-icon"><QTypeIconDisplay name={qt.name} /></span>
+                <span className="qtype-label">{qt.name}</span>
+              </button>
+            ))}
+          </div>
+          {field.value === '其它' && (
+            <input
+              type="text"
+              placeholder="請輸入提問方式說明"
+              value={qtypeInput}
+              onChange={(e) => onQtypeInput(e.target.value)}
+              autoFocus
+              style={{ marginTop: 8 }}
+            />
+          )}
+        </>
       )}
     />
   )
@@ -225,10 +310,37 @@ export default function WorkItemFormPage() {
               ⚙ 系統管理
             </Link>
           )}
+          <Link
+            to="/records"
+            state={{ user }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 12px',
+              borderRadius: 20,
+              background: 'rgba(124,111,247,0.12)',
+              border: '1px solid rgba(124,111,247,0.3)',
+              color: 'var(--accent-hover)',
+              fontSize: 13,
+              textDecoration: 'none',
+              fontWeight: 500,
+            }}
+          >
+            📋 查詢記錄
+          </Link>
         </div>
 
+
+        {/* 送出成功 overlay */}
         {status === 'success' && (
-          <div className="alert alert-success">✅ 記錄已成功送出！</div>
+          <div className="success-overlay">
+            <div className="success-card">
+              <span className="success-emoji">✅</span>
+              <p>記錄已成功送出！</p>
+              <small>表單已清空，可繼續新增項目</small>
+            </div>
+          </div>
         )}
         {status === 'error' && (
           <div className="alert alert-error">⚠ {errMsg}</div>
@@ -288,37 +400,16 @@ export default function WorkItemFormPage() {
             <p className="section-divider">提問資訊</p>
 
             <div className="form-group">
-              <label htmlFor="questionType">提問方式 <span className="required">*</span></label>
-              <Controller
+              <label>提問方式 <span className="required">*</span></label>
+              <QuestionTypeButtons
                 control={control}
-                name="questionType"
-                render={({ field }) =>
-                  field.value === '其它' ? (
-                    <input
-                      type="text"
-                      placeholder="請輸入提問方式"
-                      value={questionTypeInput}
-                      onChange={(e) => setQuestionTypeInput(e.target.value)}
-                    />
-                  ) : (
-                    <select
-                      id="questionType"
-                      value={field.value}
-                      onChange={(e) => {
-                        field.onChange(e.target.value)
-                        if (e.target.value !== '其它') setQuestionTypeInput('')
-                      }}
-                    >
-                      <option value="" disabled>— 請選擇 —</option>
-                      {options?.questionTypes.map((qt) => (
-                        <option key={qt.id} value={qt.name}>{qt.name}</option>
-                      ))}
-                    </select>
-                  )
-                }
+                options={options?.questionTypes}
+                qtypeInput={questionTypeInput}
+                onQtypeInput={setQuestionTypeInput}
               />
               {errors.questionType && <span className="field-error">⚠ {errors.questionType.message}</span>}
             </div>
+
 
             <div className="form-group">
               <label htmlFor="questioner">提問人員 <span className="required">*</span></label>
@@ -332,8 +423,25 @@ export default function WorkItemFormPage() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="questionDate">發問日期時間 <span className="required">*</span></label>
-              <input id="questionDate" type="datetime-local" {...register('questionDate')} />
+              <label>發問日期時間 <span className="required">*</span></label>
+              <Controller
+                control={control}
+                name="questionDate"
+                render={({ field }) => (
+                  <DatePicker
+                    selected={field.value ? new Date(field.value) : null}
+                    onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
+                    showTimeSelect
+                    timeFormat="HH:mm"
+                    timeIntervals={5}
+                    dateFormat="yyyy/MM/dd HH:mm"
+                    placeholderText="請選擇日期時間"
+                    timeCaption="時間"
+                    className="dp-input-full"
+                    wrapperClassName="dp-wrapper-full"
+                  />
+                )}
+              />
               {errors.questionDate && <span className="field-error">⚠ {errors.questionDate.message}</span>}
             </div>
 
@@ -379,8 +487,25 @@ export default function WorkItemFormPage() {
 
             {watchedIsDone && (
               <div className="form-group">
-                <label htmlFor="closedDate">結案日期時間</label>
-                <input id="closedDate" type="datetime-local" {...register('closedDate')} />
+                <label>結案日期時間</label>
+                <Controller
+                  control={control}
+                  name="closedDate"
+                  render={({ field }) => (
+                    <DatePicker
+                      selected={field.value ? new Date(field.value) : null}
+                      onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
+                      showTimeSelect
+                      timeFormat="HH:mm"
+                      timeIntervals={5}
+                      dateFormat="yyyy/MM/dd HH:mm"
+                      placeholderText="請選擇日期時間"
+                      timeCaption="時間"
+                      className="dp-input-full"
+                      wrapperClassName="dp-wrapper-full"
+                    />
+                  )}
+                />
               </div>
             )}
 
