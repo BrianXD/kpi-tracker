@@ -7,7 +7,7 @@ import DashboardPage from './pages/DashboardPage'
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/kpi-tracker">
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/form" element={<WorkItemFormPage />} />
