@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   const gasUrl = env.VITE_GAS_URL
 
   return {
+    base: '/kpi-tracker/',
     plugins: [
       react(),
       {
