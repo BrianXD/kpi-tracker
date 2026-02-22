@@ -60,12 +60,14 @@ export async function submitWorkItem(payload: WorkItemPayload): Promise<void> {
 export async function getRecords(
   handlerName: string,
   isAdmin: boolean,
+  startDate?: string,
+  endDate?: string,
 ): Promise<import('../types').AdminRow[]> {
   if (!GAS_PROD_URL) return []
-  return gasGet(
-    'getRecords',
-    `handler=${encodeURIComponent(handlerName)}&isAdmin=${isAdmin}`,
-  )
+  let url = `handler=${encodeURIComponent(handlerName)}&isAdmin=${isAdmin}`
+  if (startDate) url += `&startDate=${startDate}`
+  if (endDate) url += `&endDate=${endDate}`
+  return gasGet('getRecords', url)
 }
 
 export async function updateRecord(
@@ -131,6 +133,19 @@ export async function deleteAdminRow(
     rowIndex,
   })
   if (result.status !== 'ok') throw new Error(result.message ?? '刪除失敗')
+}
+
+export async function deleteAdminRows(
+  sheet: AdminSheetKey,
+  rowIndices: number[],
+): Promise<void> {
+  if (!GAS_PROD_URL) return
+  const result = await gasPost<{ status: string; message?: string }>({
+    action: 'deleteAdminRows',
+    sheet,
+    rowIndices,
+  })
+  if (result.status !== 'ok') throw new Error(result.message ?? '批次刪除失敗')
 }
 
 // ── Mock data ─────────────────────────────────────────────────────────────────

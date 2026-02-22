@@ -7,6 +7,7 @@ import {
   addAdminRow,
   saveAdminRow,
   deleteAdminRow,
+  deleteAdminRows,
 } from '../../services/api'
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -19,6 +20,15 @@ const SHEET_TABS: { key: AdminSheetKey; label: string; emoji: string }[] = [
   { key: 'employees', label: '員工資料', emoji: '🧑‍💼' },
 ]
 
+const formatDateTime24 = (val: unknown): string => {
+  if (!val) return ''
+  const s = String(val)
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return s
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function isYNField(header: string) {
@@ -28,7 +38,7 @@ function isNumberField(header: string) {
   return header === '排序' || header === 'id'
 }
 function isReadOnly(header: string) {
-  return header === 'id'
+  return header === 'id' || header.includes('建立時間')
 }
 
 function CellInput({
@@ -104,6 +114,7 @@ export default function AdminPage() {
   // Adding state
   const [isAdding, setIsAdding] = useState(false)
   const [newValues, setNewValues] = useState<Record<string, string>>({})
+  const [selectedRowIndices, setSelectedRowIndices] = useState<number[]>([])
 
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
@@ -118,6 +129,7 @@ export default function AdminPage() {
     setError(null)
     setEditingRowIdx(null)
     setIsAdding(false)
+    setSelectedRowIndices([])
     try {
       const data = await getAdminSheet(activeSheet)
       setSheetData(data)
@@ -141,6 +153,30 @@ export default function AdminPage() {
       setFieldOptions({})
     }
   }, [activeSheet])
+
+  // ── 計算下一順位排序 ────────────────────────────────────────────────────────
+  const getNextOrder = (groupCol?: string, groupVal?: string) => {
+    if (!sheetData || !sheetData.headers.includes('排序')) return ''
+    let list = sheetData.data
+    if (groupCol && groupVal) {
+      list = list.filter((r) => String(r[groupCol] ?? '') === groupVal)
+    }
+    const max = list.reduce((m, r) => Math.max(m, Number(r['排序']) || 0), 0)
+    return String(max + 5)
+  }
+
+  // 監測從下拉選單或是打字選定的「父系統」
+  const addingParentSystem = newValues['父系統']
+  useEffect(() => {
+    if (isAdding && activeSheet === 'subModules' && sheetData) {
+      if (addingParentSystem) {
+        setNewValues((prev) => ({ ...prev, 排序: getNextOrder('父系統', addingParentSystem) }))
+      } else {
+        setNewValues((prev) => ({ ...prev, 排序: '5' }))
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addingParentSystem, isAdding, activeSheet])
 
   // ── Edit ────────────────────────────────────────────────────────────────────
   const startEdit = (row: AdminRow) => {
@@ -173,7 +209,11 @@ export default function AdminPage() {
   const startAdd = () => {
     const vals: Record<string, string> = {}
     sheetData?.headers.forEach((h) => {
-      vals[h] = isYNField(h) ? 'Y' : ''
+      if (h === '排序') {
+        vals[h] = activeSheet === 'subModules' ? '5' : getNextOrder()
+      } else {
+        vals[h] = isYNField(h) ? 'Y' : ''
+      }
     })
     setNewValues(vals)
     setIsAdding(true)
@@ -215,6 +255,22 @@ export default function AdminPage() {
     }
   }
 
+  // ── Batch Delete ─────────────────────────────────────────────────────────────
+  const handleBatchDelete = async () => {
+    if (!confirm(`確定要刪除這 ${selectedRowIndices.length} 筆資料嗎？`)) return
+    setSaving(true)
+    try {
+      await deleteAdminRows(activeSheet, selectedRowIndices)
+      showToast('success', '批次刪除成功')
+      await fetchData()
+      setSelectedRowIndices([])
+    } catch (e) {
+      showToast('error', e instanceof Error ? e.message : '批次刪除失敗')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // ── Guard ────────────────────────────────────────────────────────────────────
   if (!user?.isAdmin) {
     return (
@@ -231,6 +287,7 @@ export default function AdminPage() {
   }
 
   const headers = sheetData?.headers ?? []
+  const visibleHeaders = headers.filter(h => h.toLowerCase() !== 'id')
   const rows = sheetData?.data ?? []
 
   return (
@@ -297,15 +354,28 @@ export default function AdminPage() {
             <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>
               共 <strong style={{ color: 'var(--text)' }}>{rows.length}</strong> 筆
             </span>
-            <button
-              type="button"
-              className="btn-primary"
-              style={{ width: 'auto', padding: '8px 18px', fontSize: 13, marginTop: 0 }}
-              onClick={startAdd}
-              disabled={loading || isAdding}
-            >
-              + 新增
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {selectedRowIndices.length > 0 && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ width: 'auto', padding: '8px 18px', fontSize: 13, marginTop: 0, background: 'var(--error)' }}
+                  onClick={handleBatchDelete}
+                  disabled={loading || saving}
+                >
+                  🗑 批次刪除 ({selectedRowIndices.length})
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ width: 'auto', padding: '8px 18px', fontSize: 13, marginTop: 0 }}
+                onClick={startAdd}
+                disabled={loading || isAdding}
+              >
+                + 新增
+              </button>
+            </div>
           </div>
 
           {/* Loading / Error */}
@@ -322,7 +392,16 @@ export default function AdminPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                    {headers.map((h) => (
+                    <th style={{ padding: '10px 14px', width: 40, textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+                      <input type="checkbox"
+                        checked={rows.length > 0 && selectedRowIndices.length === rows.length}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedRowIndices(rows.map(r => r._rowIndex))
+                          else setSelectedRowIndices([])
+                        }}
+                      />
+                    </th>
+                    {visibleHeaders.map((h) => (
                       <th
                         key={h}
                         style={{
@@ -359,7 +438,8 @@ export default function AdminPage() {
                   {/* New row */}
                   {isAdding && (
                     <tr style={{ background: 'rgba(124,111,247,0.06)' }}>
-                      {headers.map((h) => (
+                      <td style={{ borderBottom: '1px solid var(--border)' }}></td>
+                      {visibleHeaders.map((h) => (
                         <td key={h} style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
                           <CellInput
                             header={h}
@@ -395,7 +475,16 @@ export default function AdminPage() {
                           if (!isEditing) (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'
                         }}
                       >
-                        {headers.map((h) => (
+                        <td style={{ padding: '8px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)', textAlign: 'center' }}>
+                          <input type="checkbox"
+                            checked={selectedRowIndices.includes(row._rowIndex)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedRowIndices([...selectedRowIndices, row._rowIndex])
+                              else setSelectedRowIndices(selectedRowIndices.filter(id => id !== row._rowIndex))
+                            }}
+                          />
+                        </td>
+                        {visibleHeaders.map((h) => (
                           <td key={h} style={{ padding: '8px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)', verticalAlign: 'middle' }}>
                             {isEditing ? (
                               <CellInput
@@ -406,7 +495,9 @@ export default function AdminPage() {
                               />
                             ) : (
                               <span style={{ color: renderCellColor(h, row[h]) }}>
-                                {String(row[h] ?? '')}
+                                {(h.includes('時間') || h.includes('日期')) && String(row[h])
+                                  ? formatDateTime24(row[h])
+                                  : String(row[h] ?? '')}
                               </span>
                             )}
                           </td>

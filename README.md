@@ -1,73 +1,119 @@
-# React + TypeScript + Vite
+# KPI Tracker
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+KPI Tracker 是一個輕量化、直覺的工作記錄追蹤系統。
+前端基於 **React + TypeScript + Vite** 開發，後端資料庫使用 **Google Sheets** 與 **Google Apps Script (GAS)** 搭建，無需額外建置伺服器即可免費運行。
 
-Currently, two official plugins are available:
+## 系統架構理念
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **前端**：負責表單介面、資料驗證、KPI 儀表板圖表展示。
+- **後端 (GAS)**：提供 RESTful API，並負責對 Google Sheets 進行讀寫操作。
+- **資料庫 (Google Sheets)**：區分「系統別」、「子模組」、「提問人員」、「提問方式」等基礎選項表，以及一欄「問題清單記錄」用於存儲所有的工作記錄。
 
-## React Compiler
+## 📁 快速開始 (本機部署)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. **安裝依賴**：
+   請確認您已安裝 Node.js (建議 v18 以上)。
+   ```bash
+   npm install
+   ```
 
-## Expanding the ESLint configuration
+2. **環境變數設定**：
+   請將根目錄的 `.env.example` 複製一份並命名為 `.env`，填上您部署好的 GAS Web App URL。
+   ```env
+   VITE_GAS_URL=https://script.google.com/macros/s/您的ID/exec
+   ```
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+3. **啟動開發伺服器**：
+   ```bash
+   npm run dev
+   ```
+   現在您可以打開瀏覽器進入 `http://localhost:5173`。
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 📊 如何設定 Google Sheets 與 GAS 後端
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+為了讓前後端能正常連繫，您需要準備好前端所對應的 Google Sheets 與對應的 GAS Code。
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### 1. 準備 Google Sheets 資料表
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+請建立一個全新的 Google Sheets，並在下方建立五個工作表 (Sheet)，請**務必完全照此命名**：
+1. **問題清單記錄**
+2. **系統別**
+3. **子模組**
+4. **提問人員**
+5. **提問方式**
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+#### 測試範本資料 (可直接複製貼上)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+您可以將以下的表格複製，點選 Google Sheets 的 A1 儲存格，然後 **「貼上」**。
+
+**【問題清單記錄】** (首列為標題，不需預設資料)
+| id  | systemName | subModuleName | handler | questioner | difficulty | priority | questionDate | questionType | isDone | closedDate | minutes | note |
+| --- | ---------- | ------------- | ------- | ---------- | ---------- | -------- | ------------ | ------------ | ------ | ---------- | ------- | ---- |
+
+**【系統別】**
+| id  | name         | isEnabled | order |
+| --- | ------------ | --------- | ----- |
+| 1   | 電商系統     | Y         | 1     |
+| 2   | 內部管理系統 | Y         | 2     |
+| 3   | HR 系統      | Y         | 3     |
+
+**【子模組】**
+| id  | parentSystem | name     | isEnabled | order |
+| --- | ------------ | -------- | --------- | ----- |
+| 1   | 電商系統     | 結帳模組 | Y         | 1     |
+| 2   | 電商系統     | 會員模組 | Y         | 2     |
+| 3   | 內部管理系統 | 權限控管 | Y         | 1     |
+| 4   | HR 系統      | 考勤模組 | Y         | 1     |
+
+**【提問人員】**
+| id  | name   | empId  | isEnabled | order |
+| --- | ------ | ------ | --------- | ----- |
+| 1   | 王大明 | EMP001 | Y         | 1     |
+| 2   | 李小華 | EMP002 | Y         | 2     |
+| 3   | 陳建國 | EMP003 | Y         | 3     |
+
+**【提問方式】**
+| id  | name  | isEnabled | order |
+| --- | ----- | --------- | ----- |
+| 1   | LINE  | Y         | 1     |
+| 2   | Email | Y         | 2     |
+| 3   | 電話  | Y         | 3     |
+| 4   | 現場  | Y         | 4     |
+
+---
+
+### 2. 部署 Google Apps Script
+
+1. 在該 Google Sheets 中，點擊上方選單的 **「擴充功能」 -> 「Apps Script」**。
+2. 將專案中的 `gas/Code.gs` 檔案內容，完全複製並取代編輯器中的程式碼。
+3. 點擊上方的 **「部署」 -> 「新增部署作業」**。
+4. 選擇類型：**網頁應用程式 (Web App)**。
+5. **執行身分**：選擇「我」。
+6. **誰可以存取**：選擇「所有人」。
+7. 點擊「部署」後，您會獲得一串 **網頁應用程式網址 (URL)**，請將此 URL 複製並貼至前端專案的 `.env` 中 (`VITE_GAS_URL=...`)。
+
+> **💡 重要提示**：日後如果您有更新 `Code.gs`，請務必按照上述步驟再次選擇「新增部署作業」並取得新的 URL（或者在管理部署作業中編輯並建立「新版本」），否則改動不會生效。
+
+## 🚀 GitHub Actions 自動部署至 GitHub Pages
+
+專案內已包含 `.github/workflows/deploy.yml` 腳本，可將靜態網頁自動建置並部署至 GitHub Pages。
+如果您已將此專案推播到自己的 GitHub Repository，請依照以下步驟設定：
+
+### 1. 設定 Repository Secrets
+
+為了安全地帶入 GAS Web App URL，您需要在 GitHub 上設定 Secret：
+1. 進入您的 Repository 頁面，點選 **Settings**。
+2. 在左側選單選擇 **Secrets and variables -> Actions**。
+3. 點擊 **New repository secret**。
+4. **Name** 填入：`VITE_GAS_URL`
+5. **Secret** 填入：剛剛取得的 GAS Web App URL（例如 `https://script.google.com/macros/s/.../exec`）。
+6. 點擊 Add secret 儲存。
+
+### 2. 啟動 GitHub Pages 環境
+
+1. 回到專案的 **Settings**，在左側選單選擇 **Pages**。
+2. 在 **Build and deployment** 區塊，將 **Source** 改為 **GitHub Actions**。
+3. 接下來只要您把程式碼 Push 到 `main` 分支（或在 Actions 頁面手動觸發），GitHub Actions 就會自動編譯專案，並發布到 Github Pages！
+
+> **⚠️ GitHub Pages 的注意事項**：
+> 如果您不是部署在 username.github.io 的根目錄，而是部署在特定的儲存庫底下（如 username.github.io/my-repo-name），您可能會需要去 `vite.config.ts` 設定 `base: '/my-repo-name/'`，以確保 GitHub Pages 能正確載入對應的 JS/CSS 靜態檔。

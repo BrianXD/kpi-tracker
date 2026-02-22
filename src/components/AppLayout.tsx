@@ -11,6 +11,7 @@ export default function AppLayout({ user, children }: AppLayoutProps) {
   const { pathname } = useLocation()
 
   const navItems = [
+    { to: '/dashboard', icon: '📊', label: '儀表板' },
     { to: '/form', icon: '✏️', label: '新增工作記錄' },
     { to: '/records', icon: '📋', label: '查詢記錄' },
     ...(user.isAdmin ? [{ to: '/admin', icon: '⚙', label: '系統管理' }] : []),

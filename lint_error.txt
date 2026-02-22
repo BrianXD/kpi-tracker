@@ -1,0 +1,17 @@
+
+D:\CodingTest\SKILL\kpi-tracker\src\pages\WorkItemFormPage\index.tsx
+  199:25  warning  Compilation Skipped: Use of incompatible library
+
+This API returns functions which cannot be memoized without leading to stale UI. To prevent this, by default React Compiler will skip memoizing this component/hook. However, you may see issues if values from this API are passed to other components/hooks that are memoized.
+
+D:\CodingTest\SKILL\kpi-tracker\src\pages\WorkItemFormPage\index.tsx:199:25
+  197 |   })
+  198 |
+> 199 |   const watchedSystem = watch('system')
+      |                         ^^^^^ React Hook Form's `useForm()` API returns a `watch()` function which cannot be memoized safely.
+  200 |   const watchedSubModule = watch('subModule')
+  201 |   const watchedMinutes = watch('minutes')
+  202 |     react-hooks/incompatible-library
+
+??1 problem (0 errors, 1 warning)
+

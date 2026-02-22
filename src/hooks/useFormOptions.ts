@@ -6,6 +6,7 @@ interface UseFormOptionsResult {
   data: FormOptions | null
   loading: boolean
   error: string | null
+  refetch: () => Promise<void>
 }
 
 export function useFormOptions(): UseFormOptionsResult {
@@ -13,14 +14,22 @@ export function useFormOptions(): UseFormOptionsResult {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const refetch = async () => {
+    setLoading(true)
+    try {
+      const res = await getFormOptions()
+      setData(res)
+      setError(null)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '載入失敗')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    getFormOptions()
-      .then(setData)
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : '載入失敗')
-      )
-      .finally(() => setLoading(false))
+    refetch()
   }, [])
 
-  return { data, loading, error }
+  return { data, loading, error, refetch }
 }

@@ -9,6 +9,7 @@ import { z } from 'zod'
 import type { User, Level, AdminRow } from '../../types'
 import { getRecords, updateRecord } from '../../services/api'
 import { useFormOptions } from '../../hooks/useFormOptions'
+import * as XLSX from 'xlsx'
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 const schema = z.object({
@@ -335,8 +336,17 @@ export default function RecordsPage() {
   const [fDifficulty, setFDifficulty] = useState('')
   const [fPriority, setFPriority]     = useState('')
   const [fIsDone, setFIsDone]         = useState('')
-  const [fFrom, setFFrom]             = useState<Date | null>(null)
-  const [fTo, setFTo]                 = useState<Date | null>(null)
+  
+  // 日期預設為最近一個月
+  const [fFrom, setFFrom] = useState<Date | null>(() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d })
+  const [fTo, setFTo]     = useState<Date | null>(() => new Date())
+  
+  // 關鍵字搜尋
+  const [keyword, setKeyword] = useState('')
+  
+  // 分頁
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 50
 
   // fSystem 變更時重置子模組
   useEffect(() => { setFSubModule('') }, [fSystem])
@@ -348,10 +358,15 @@ export default function RecordsPage() {
   const fetchRecords = useCallback(async () => {
     if (!user) return
     setLoading(true); setError(null)
-    try { setRecords(await getRecords(user.name, user.isAdmin)) }
+    try {
+      // 將 Date 轉成 YYYY-MM-DD 字串傳給後端做過濾
+      const startStr = fFrom ? `${fFrom.getFullYear()}-${String(fFrom.getMonth()+1).padStart(2,'0')}-${String(fFrom.getDate()).padStart(2,'0')}` : undefined
+      const endStr   = fTo ? `${fTo.getFullYear()}-${String(fTo.getMonth()+1).padStart(2,'0')}-${String(fTo.getDate()).padStart(2,'0')}` : undefined
+      setRecords(await getRecords(user.name, user.isAdmin, startStr, endStr))
+    }
     catch (e) { setError(e instanceof Error ? e.message : '讀取失敗') }
     finally { setLoading(false) }
-  }, [user])
+  }, [user, fFrom, fTo])
 
   useEffect(() => { fetchRecords() }, [fetchRecords])
 
@@ -368,11 +383,15 @@ export default function RecordsPage() {
     if (fDifficulty && String(r['難度']) !== fDifficulty)         return false
     if (fPriority   && String(r['優先權']) !== fPriority)         return false
     if (fIsDone     && String(r['是否完成']) !== fIsDone)         return false
-    if (fFrom || fTo) {
-      const d = new Date(parseDateVal(r['提問日期']))
-      if (fFrom && d < fFrom) return false
-      if (fTo) { const toEnd = new Date(fTo); toEnd.setHours(23,59,59); if (d > toEnd) return false }
+    
+    // 關鍵字模糊搜尋
+    if (keyword) {
+      const kw = keyword.toLowerCase()
+      const match = Object.values(r).some(val => String(val ?? '').toLowerCase().includes(kw))
+      if (!match) return false
     }
+    
+    // 日期過濾已交由 API 處理，此處不再過濾
     return true
   })
 
@@ -397,11 +416,43 @@ export default function RecordsPage() {
     else { setSortKey(key); setSortDir('asc') }
   }
 
+  const handleExportExcel = () => {
+    if (sorted.length === 0) {
+      showToast('error', '沒有可匯出的資料')
+      return
+    }
+    const exportData = sorted.map((rec) => {
+      const row: Record<string, string> = {}
+      cols.forEach(c => {
+        row[c.label] = (c.key.includes('日期') || c.key.includes('時間'))
+          ? formatDateTime24(rec[c.key])
+          : String(rec[c.key] ?? '')
+      })
+      return row
+    })
+    
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '查詢結果')
+    
+    const now = new Date()
+    const p = (n: number) => String(n).padStart(2, '0')
+    const timestamp = `${now.getFullYear()}${p(now.getMonth()+1)}${p(now.getDate())}_${p(now.getHours())}${p(now.getMinutes())}`
+    XLSX.writeFile(wb, `工作記錄查詢_${timestamp}.xlsx`)
+  }
+
   const clearFilters = () => {
     setFPerson(''); setFSystem(''); setFSubModule(''); setFQuestioner('')
     setFQType(''); setFDifficulty(''); setFPriority(''); setFIsDone('')
-    setFFrom(null); setFTo(null)
+    setFFrom(null); setFTo(null); setKeyword(''); setCurrentPage(1)
   }
+
+  // Effect to reset page when filters change
+  useEffect(() => { setCurrentPage(1) }, [fPerson, fSystem, fSubModule, fQuestioner, fQType, fDifficulty, fPriority, fIsDone, keyword])
+
+  // Pagination logic
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE) || 1
+  const paginated = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   const handleSave = async (rowIndex: number, values: EditFormValues, qTypeInput: string) => {
     if (!user) return
@@ -517,6 +568,11 @@ export default function RecordsPage() {
               dateFormat="yyyy/MM/dd" placeholderText="結束日期" isClearable
               className="dp-input" wrapperClassName="dp-wrapper"
               minDate={fFrom ?? undefined} />
+            
+            {/* 關鍵字查詢 */}
+            <input type="text" placeholder="🔍 搜尋問題描述、ID 等..." value={keyword} onChange={(e) => setKeyword(e.target.value)}
+              className="form-input" style={{ width: 180, padding: '6px 10px', fontSize: 13, background: 'var(--bg-elevated)', borderRadius: 6 }} />
+
             {/* Quick presets */}
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {QUICK_PRESETS.map((p) => (
@@ -532,7 +588,11 @@ export default function RecordsPage() {
                 ✕ 清除篩選
               </button>
             )}
-            <span style={{ color: 'var(--text-muted)', fontSize: 13, marginLeft: hasFilter ? 0 : 'auto', alignSelf: 'center' }}>
+            <button type="button" onClick={handleExportExcel}
+              style={{ marginLeft: hasFilter ? 8 : 'auto', padding: '6px 14px', fontSize: 12, borderRadius: 6, border: 'none', background: '#1D6F42', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+              📊 匯出 Excel
+            </button>
+            <span style={{ color: 'var(--text-muted)', fontSize: 13, marginLeft: 16, alignSelf: 'center' }}>
               共 <strong style={{ color: 'var(--text)' }}>{sorted.length}</strong> / {records.length} 筆
             </span>
           </div>
@@ -552,8 +612,8 @@ export default function RecordsPage() {
                       const isSorted = sortKey === col.key
                       return (
                         <th key={col.key} onClick={() => handleSort(col.key)}
-                          style={{ padding: '10px 14px', textAlign: 'left', color: isSorted ? 'var(--accent-hover)' : 'var(--text-muted)', fontWeight: 600, fontSize: 12, letterSpacing: '0.04em', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', transition: 'color 0.15s' }}>
-                          {col.label} {isSorted ? (sortDir === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.3 }}>↕</span>}
+                          style={{ padding: '10px 14px', textAlign: 'left', color: isSorted ? 'var(--accent-hover)' : 'var(--text-muted)', fontWeight: 600, fontSize: 13, letterSpacing: '0.04em', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', transition: 'color 0.15s' }}>
+                          {col.label} {isSorted ? (sortDir === 'asc' ? '▲' : '▼') : <span style={{ opacity: 0.3 }}>⇅</span>}
                         </th>
                       )
                     })}
@@ -561,12 +621,12 @@ export default function RecordsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.length === 0 && (
+                  {paginated.length === 0 && (
                     <tr><td colSpan={cols.length + 1} style={{ padding: 40, textAlign: 'center', color: 'var(--text-dim)' }}>
-                      {records.length === 0 ? '尚無工作記錄' : '沒有符合條件的記錄'}
+                      {records.length === 0 ? '此區間無工作記錄' : '沒有符合條件的記錄'}
                     </td></tr>
                   )}
-                  {sorted.map((rec) => {
+                  {paginated.map((rec) => {
                     const diff = String(rec['難度'] ?? '')
                     const pri = String(rec['優先權'] ?? '')
                     const ZH_EN: Record<string, Level> = { 高:'HIGH', 中:'MID', 低:'LOW' }
@@ -596,6 +656,29 @@ export default function RecordsPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderTop: '1px solid var(--border)', fontSize: 13 }}>
+                <div style={{ color: 'var(--text-muted)' }}>
+                  顯示 {(currentPage - 1) * PAGE_SIZE + 1} - {Math.min(currentPage * PAGE_SIZE, sorted.length)} 筆
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}
+                    style={{ padding: '6px 12px', borderRadius: 4, background: currentPage <= 1 ? 'var(--bg)' : 'var(--surface)', border: '1px solid var(--border)', color: currentPage <= 1 ? 'var(--text-dim)' : 'var(--text)', cursor: currentPage <= 1 ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                    上一頁
+                  </button>
+                  <span style={{ color: 'var(--text)', fontWeight: 500, margin: '0 4px' }}>
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}
+                    style={{ padding: '6px 12px', borderRadius: 4, background: currentPage >= totalPages ? 'var(--bg)' : 'var(--surface)', border: '1px solid var(--border)', color: currentPage >= totalPages ? 'var(--text-dim)' : 'var(--text)', cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                    下一頁
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
     </AppLayout>

@@ -13,7 +13,7 @@ import AppLayout from '../../components/AppLayout'
 // ── Schema ───────────────────────────────────────────────────────────────────
 const schema = z.object({
   system: z.string().min(1, '請選擇系統別'),
-  subModule: z.string().min(1, '請填寫子模組'),
+  subModule: z.string().optional(),
   questionType: z.string().min(1, '請選擇提問方式'),
   questioner: z.string().min(1, '請選擇提問人員'),
   questionDate: z.string().min(1, '請填寫發問日期'),
@@ -125,23 +125,21 @@ function QuestionTypeButtons({
       control={control}
       name="questionType"
       render={({ field }) => (
-        <>
-          <div className="btn-group-qtype">
-            {(options ?? []).map((qt) => (
-              <button
-                key={qt.id}
-                type="button"
-                className={`btn-qtype${field.value === qt.name ? ' active' : ''}`}
-                onClick={() => {
-                  field.onChange(qt.name)
-                  if (qt.name !== '其它') onQtypeInput('')
-                }}
-              >
-                <span className="qtype-icon"><QTypeIconDisplay name={qt.name} /></span>
-                <span className="qtype-label">{qt.name}</span>
-              </button>
-            ))}
-          </div>
+        <div className="btn-group-qtype">
+          {(options ?? []).map((qt) => (
+            <button
+              key={qt.id}
+              type="button"
+              className={`btn-qtype${field.value === qt.name ? ' active' : ''}`}
+              onClick={() => {
+                field.onChange(qt.name)
+                if (qt.name !== '其它') onQtypeInput('')
+              }}
+            >
+              <span className="qtype-icon"><QTypeIconDisplay name={qt.name} /></span>
+              <span className="qtype-label">{qt.name}</span>
+            </button>
+          ))}
           {field.value === '其它' && (
             <input
               type="text"
@@ -149,10 +147,10 @@ function QuestionTypeButtons({
               value={qtypeInput}
               onChange={(e) => onQtypeInput(e.target.value)}
               autoFocus
-              style={{ marginTop: 8 }}
+              style={{ display: 'inline-block', width: '200px', flex: '1 1 auto', margin: 0 }}
             />
           )}
-        </>
+        </div>
       )}
     />
   )
@@ -166,8 +164,6 @@ export default function WorkItemFormPage() {
 
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [errMsg, setErrMsg] = useState('')
-
-  const [subModuleInput, setSubModuleInput] = useState('')
   const [questionTypeInput, setQuestionTypeInput] = useState('')
 
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -179,6 +175,7 @@ export default function WorkItemFormPage() {
     watch,
     reset,
     setValue,
+    getValues,
     formState: { errors },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<FormValues>({ resolver: zodResolver(schema) as any,
@@ -190,39 +187,59 @@ export default function WorkItemFormPage() {
       questionDate: toDatetimeLocal(new Date()),
       difficulty: 'MID',
       priority: 'MID',
-      isDone: false,
-      closedDate: '',
+      isDone: true,
+      closedDate: toDatetimeLocal(new Date()),
       minutes: undefined,
       note: '',
-    },
+    }
   })
 
   const watchedSystem = watch('system')
-  const watchedIsDone = watch('isDone')
-  const isSystemOther = watchedSystem === '其它'
+  const watchedMinutes = watch('minutes')
 
   const filteredSubModules =
     options?.subModules.filter((sm) => sm.parentSystem === watchedSystem) ?? []
 
+  // 1. 初始化預設值
   useEffect(() => {
-    setValue('subModule', '')
-    setSubModuleInput('')
-  }, [watchedSystem, setValue])
+    if (options && !optLoading) {
+      const curSys = getValues('system')
+      const curEr = getValues('questioner')
+      const curQt = getValues('questionType')
+
+      // 若全空代表表單初次載入，設定各欄位第一項為預設
+      if (!curSys && !curEr && !curQt) {
+        const firstSys = options.systems[0]?.name || ''
+        const firstErItem = options.employees[0]
+        const firstEr = firstErItem ? `${firstErItem.name}（${firstErItem.empId}）` : ''
+        const firstQt = options.questionTypes[0]?.name || ''
+
+        setValue('system', firstSys)
+        setValue('questioner', firstEr)
+        setValue('questionType', firstQt)
+        if (firstQt !== '其它') setQuestionTypeInput('')
+      }
+    }
+  }, [options, optLoading, setValue, getValues])
+
+  // 2. 當選擇的「系統別」改變時，自動將子模組切換到該系統的第一項
+  useEffect(() => {
+    const currentSmList = options?.subModules.filter((sm) => sm.parentSystem === watchedSystem) ?? []
+    if (currentSmList.length > 0) {
+      const curSm = getValues('subModule')
+      if (!currentSmList.some(s => s.name === curSm)) {
+        setValue('subModule', currentSmList[0].name)
+      }
+    }
+  }, [watchedSystem, options?.subModules, setValue, getValues])
 
   const onSubmit = async (data: FormValues) => {
     if (!user) return
     setStatus('submitting')
     setErrMsg('')
 
-    const finalSubModule = isSystemOther ? subModuleInput : data.subModule
     const isQTypeOther = data.questionType === '其它'
     const finalQuestionType = isQTypeOther ? questionTypeInput : data.questionType
-
-    if (isSystemOther && !subModuleInput.trim()) {
-      setStatus('idle')
-      setErrMsg('請填寫子模組名稱')
-      return
-    }
     if (isQTypeOther && !questionTypeInput.trim()) {
       setStatus('idle')
       setErrMsg('請填寫提問方式')
@@ -232,7 +249,7 @@ export default function WorkItemFormPage() {
     try {
       await submitWorkItem({
         system: data.system,
-        subModule: finalSubModule,
+        subModule: data.subModule || '',
         handler: user.name,
         questioner: data.questioner,
         difficulty: data.difficulty,
@@ -254,12 +271,11 @@ export default function WorkItemFormPage() {
         questionDate: toDatetimeLocal(new Date()),
         difficulty: 'MID',
         priority: 'MID',
-        isDone: false,
-        closedDate: '',
-        minutes: '',
+        isDone: true,
+        closedDate: toDatetimeLocal(new Date()),
+        minutes: undefined,
         note: '',
       })
-      setSubModuleInput('')
       setQuestionTypeInput('')
       successTimer.current = setTimeout(() => setStatus('idle'), 4000)
     } catch (e) {
@@ -307,186 +323,197 @@ export default function WorkItemFormPage() {
       {errMsg && status === 'idle' && <div className="alert alert-error">⚠ {errMsg}</div>}
       {optError && <div className="alert alert-error">⚠ 下拉資料載入失敗：{optError}</div>}
 
-      {optLoading ? (
-        <div className="spinner-wrap">
-          <div className="spinner" />
-          <span>載入下拉資料中…</span>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <div className="card form-card">
+        {optLoading ? (
+          <div className="spinner-wrap"><div className="spinner" /><span>載入基礎資料中…</span></div>
+        ) : (
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            onKeyDown={(e) => {
+              // 支援 Ctrl + Enter 快捷鍵送出
+              if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault()
+                handleSubmit(onSubmit)()
+              }
+            }}
+            noValidate
+          >
 
-              <p className="section-divider">系統資訊</p>
+              <p className="section-divider">提問資訊</p>
 
-              <div className="form-grid-wide">
-                <div className="form-group">
-                  <label htmlFor="system">系統別 <span className="required">*</span></label>
-                  <select id="system" autoFocus {...register('system')}>
+              <div className="form-group">
+                <label>發問日期時間 <span className="required">*</span></label>
+                <Controller
+                  control={control}
+                  name="questionDate"
+                  render={({ field }) => (
+                    <DatePicker
+                      selected={field.value ? new Date(field.value) : null}
+                      onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
+                      showTimeSelect
+                      timeFormat="HH:mm"
+                      timeIntervals={5}
+                      dateFormat="yyyy/MM/dd HH:mm"
+                      placeholderText="請選擇日期時間"
+                      timeCaption="時間"
+                      className="dp-input-full"
+                      wrapperClassName="dp-wrapper-full"
+                    />
+                  )}
+                />
+                {errors.questionDate && <span className="field-error">⚠ {errors.questionDate.message}</span>}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="system">系統別 <span className="required">*</span></label>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <select id="system" autoFocus {...register('system')} style={{ flex: 1 }}>
                     <option value="" disabled>— 請選擇 —</option>
                     {options?.systems.map((s) => (
                       <option key={s.id} value={s.name}>{s.name}</option>
                     ))}
                   </select>
-                  {errors.system && <span className="field-error">⚠ {errors.system.message}</span>}
                 </div>
-
-                <div className="form-group">
-                  <label htmlFor="subModule">子模組 <span className="required">*</span></label>
-                  {isSystemOther ? (
-                    <input
-                      id="subModule"
-                      type="text"
-                      placeholder="請輸入子模組名稱…"
-                      value={subModuleInput}
-                      onChange={(e) => {
-                        setSubModuleInput(e.target.value)
-                        setValue('subModule', e.target.value)
-                      }}
-                    />
-                  ) : (
-                    <select id="subModule" {...register('subModule')} disabled={!watchedSystem}>
-                      <option value="" disabled>— 請先選系統別 —</option>
-                      {filteredSubModules.map((sm) => (
-                        <option key={sm.id} value={sm.name}>{sm.name}</option>
-                      ))}
-                    </select>
-                  )}
-                  {errors.subModule && <span className="field-error">⚠ {errors.subModule.message}</span>}
-                </div>
+                {errors.system && <span className="field-error">⚠ {errors.system.message}</span>}
               </div>
 
-              <p className="section-divider">提問資訊</p>
+              <div className="form-group">
+                <label htmlFor="subModule">子模組</label>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <select id="subModule" {...register('subModule')} disabled={!watchedSystem || filteredSubModules.length === 0} style={{ flex: 1 }}>
+                    <option value="">{watchedSystem && filteredSubModules.length === 0 ? '— 無子模組選項 —' : '— 請先選系統別 —'}</option>
+                    {filteredSubModules.map((sm) => (
+                      <option key={sm.id} value={sm.name}>{sm.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {errors.subModule && <span className="field-error">⚠ {errors.subModule.message}</span>}
+              </div>
 
               <div className="form-group">
                 <label>提問方式 <span className="required">*</span></label>
-                <QuestionTypeButtons
-                  control={control}
-                  options={options?.questionTypes}
-                  qtypeInput={questionTypeInput}
-                  onQtypeInput={setQuestionTypeInput}
-                />
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <QuestionTypeButtons
+                    control={control}
+                    options={options?.questionTypes}
+                    qtypeInput={questionTypeInput}
+                    onQtypeInput={setQuestionTypeInput}
+                  />
+                </div>
                 {errors.questionType && <span className="field-error">⚠ {errors.questionType.message}</span>}
               </div>
 
-              <div className="form-grid-wide">
-                <div className="form-group">
-                  <label htmlFor="questioner">提問人員 <span className="required">*</span></label>
-                  <select id="questioner" {...register('questioner')}>
-                    <option value="" disabled>— 請選擇 —</option>
-                    {options?.employees.map((emp) => (
-                      <option key={emp.id} value={emp.name}>{emp.name}（{emp.empId}）</option>
-                    ))}
-                  </select>
-                  {errors.questioner && <span className="field-error">⚠ {errors.questioner.message}</span>}
-                </div>
-
-                <div className="form-group">
-                  <label>發問日期時間 <span className="required">*</span></label>
-                  <Controller
-                    control={control}
-                    name="questionDate"
-                    render={({ field }) => (
-                      <DatePicker
-                        selected={field.value ? new Date(field.value) : null}
-                        onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
-                        showTimeSelect
-                        timeFormat="HH:mm"
-                        timeIntervals={5}
-                        dateFormat="yyyy/MM/dd HH:mm"
-                        placeholderText="請選擇日期時間"
-                        timeCaption="時間"
-                        className="dp-input-full"
-                        wrapperClassName="dp-wrapper-full"
-                      />
-                    )}
-                  />
-                  {errors.questionDate && <span className="field-error">⚠ {errors.questionDate.message}</span>}
-                </div>
+              <div className="form-group">
+                <label htmlFor="questioner">提問人員 <span className="required">*</span></label>
+                <select id="questioner" {...register('questioner')}>
+                  <option value="" disabled>— 請選擇 —</option>
+                  {options?.employees.map((emp) => (
+                    <option key={emp.id} value={emp.name}>{emp.name}（{emp.empId}）</option>
+                  ))}
+                </select>
+                {errors.questioner && <span className="field-error">⚠ {errors.questioner.message}</span>}
               </div>
 
-              <p className="section-divider">評級</p>
+              <p className="section-divider">評級與進度</p>
 
-              <div className="form-grid-wide">
-                <div className="form-group">
-                  <label>難度 <span className="required">*</span></label>
-                  <LevelButtons name="difficulty" control={control} />
-                </div>
-                <div className="form-group">
-                  <label>優先權 <span className="required">*</span></label>
-                  <LevelButtons name="priority" control={control} />
-                </div>
+              <div className="form-group">
+                <label>難度 <span className="required">*</span></label>
+                <LevelButtons name="difficulty" control={control} />
               </div>
 
-              <p className="section-divider">完成狀態</p>
+              <div className="form-group">
+                <label>優先權 <span className="required">*</span></label>
+                <LevelButtons name="priority" control={control} />
+              </div>
 
-              <div className="form-grid-wide">
-                <div className="form-group">
-                  <Controller
-                    control={control}
-                    name="isDone"
-                    render={({ field }) => (
-                      <div
-                        className="toggle-row"
-                        onClick={() => field.onChange(!field.value)}
-                        role="switch"
-                        aria-checked={field.value}
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === ' ' || e.key === 'Enter') {
-                            e.preventDefault()
-                            field.onChange(!field.value)
-                          }
-                        }}
-                      >
-                        <span>{field.value ? '✅ 已完成' : '⏳ 尚未完成'}</span>
-                        <div className={`toggle-switch ${field.value ? 'on' : ''}`} />
-                      </div>
-                    )}
-                  />
-                </div>
-
-                {watchedIsDone && (
-                  <div className="form-group">
-                    <label>結案日期時間</label>
-                    <Controller
-                      control={control}
-                      name="closedDate"
-                      render={({ field }) => (
-                        <DatePicker
-                          selected={field.value ? new Date(field.value) : null}
-                          onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
-                          showTimeSelect
-                          timeFormat="HH:mm"
-                          timeIntervals={5}
-                          dateFormat="yyyy/MM/dd HH:mm"
-                          placeholderText="請選擇日期時間"
-                          timeCaption="時間"
-                          className="dp-input-full"
-                          wrapperClassName="dp-wrapper-full"
-                        />
-                      )}
-                    />
-                  </div>
-                )}
+              <div className="form-group">
+                <label>完成狀態</label>
+                <Controller
+                  control={control}
+                  name="isDone"
+                  render={({ field }) => (
+                    <div
+                      className="toggle-row"
+                      onClick={() => field.onChange(!field.value)}
+                      role="switch"
+                      aria-checked={field.value}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === ' ' || e.key === 'Enter') {
+                          e.preventDefault()
+                          field.onChange(!field.value)
+                        }
+                      }}
+                    >
+                      <span>{field.value ? '✅ 已完成' : '⏳ 尚未完成'}</span>
+                      <div className={`toggle-switch ${field.value ? 'on' : ''}`} />
+                    </div>
+                  )}
+                />
               </div>
 
               <p className="section-divider">其他資訊</p>
 
-              <div className="form-grid-wide">
-                <div className="form-group">
-                  <label htmlFor="minutes">處理花費時間（分鐘）</label>
-                  <input
-                    id="minutes"
-                    type="number"
-                    min={0}
-                    step={1}
-                    placeholder="例：30"
-                    {...register('minutes')}
-                  />
+              <div className="form-group">
+                <label htmlFor="minutes">處理花費時間（分鐘）</label>
+                <input
+                  id="minutes"
+                  type="number"
+                  min={0}
+                  step={1}
+                  placeholder="例：30"
+                  {...register('minutes')}
+                />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  {[10, 20, 30, 40, 50, 60, 90, 120].map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setValue('minutes', m, { shouldValidate: true })}
+                      style={{
+                        padding: '4px 10px', fontSize: 13, borderRadius: 16, border: '1px solid var(--border)',
+                        background: watchedMinutes === m ? 'var(--accent)' : 'var(--bg-elevated)',
+                        color: watchedMinutes === m ? '#fff' : 'var(--text-muted)', cursor: 'pointer',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {m}分
+                    </button>
+                  ))}
                 </div>
-                <div className="form-group">
-                  <label htmlFor="note">備註</label>
-                  <input id="note" type="text" placeholder="選填備註說明…" {...register('note')} />
-                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="note">備註</label>
+                <textarea
+                  id="note"
+                  rows={3}
+                  placeholder="選填備註說明…"
+                  {...register('note')}
+                  style={{ width: '100%', resize: 'vertical', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>結案日期時間</label>
+                <Controller
+                  control={control}
+                  name="closedDate"
+                  render={({ field }) => (
+                    <DatePicker
+                      selected={field.value ? new Date(field.value) : null}
+                      onChange={(d: Date | null) => field.onChange(d ? toDatetimeLocal(d) : '')}
+                      showTimeSelect
+                      timeFormat="HH:mm"
+                      timeIntervals={5}
+                      dateFormat="yyyy/MM/dd HH:mm"
+                      placeholderText="請選擇日期時間"
+                      timeCaption="時間"
+                      className="dp-input-full"
+                      wrapperClassName="dp-wrapper-full"
+                    />
+                  )}
+                />
               </div>
 
               <div style={{ marginTop: 24 }}>
@@ -494,14 +521,15 @@ export default function WorkItemFormPage() {
                   type="submit"
                   className="btn-primary"
                   disabled={status === 'submitting'}
-                  style={{ maxWidth: 320 }}
+                  style={{ maxWidth: '100%' }}
                 >
-                  {status === 'submitting' ? '送出中…' : '送出記錄 ✓'}
+                  {status === 'submitting' ? '送出中…' : '送出記錄 ✓ (Ctrl+Enter)'}
                 </button>
               </div>
 
             </form>
-          )}
+        )}
+      </div>
     </AppLayout>
   )
 }

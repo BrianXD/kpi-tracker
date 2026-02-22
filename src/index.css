@@ -113,6 +113,10 @@ body {
   max-width: 520px;
 }
 
+.form-card {
+  max-width: 100%; /* Let .app-main-inner control the max width */
+}
+
 /* ── PC App Shell (WorkItemFormPage) ── */
 .app-shell {
   display: grid;
@@ -254,15 +258,8 @@ body {
 }
 
 .app-main-inner {
-  max-width: 900px;
+ 
   margin: 0 auto;
-}
-
-/* Form wide: use 2-col grid for paired groups */
-.form-grid-wide {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
 }
 
 @media (max-width: 900px) {
@@ -278,9 +275,6 @@ body {
   }
   .app-main {
     padding: 20px 16px;
-  }
-  .form-grid-wide {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -510,6 +504,11 @@ textarea {
   accent-color: var(--accent);
   cursor: pointer;
   padding: 0;
+}
+
+input[type="checkbox"] {
+  appearance: auto;
+  -webkit-appearance: auto;
 }
 
 .checkbox-row span {
@@ -755,8 +754,10 @@ textarea {
 /* ── Question type button group ── */
 .btn-group-qtype {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px; /* for scrollbar */
 }
 
 .btn-qtype {
@@ -777,6 +778,7 @@ textarea {
   align-items: center;
   gap: 3px;
   min-width: 64px;
+  flex-shrink: 0;
 }
 
 .btn-qtype:hover {

@@ -43,7 +43,12 @@ function doGet(e) {
     } else if (action === "getAdminSheet") {
       result = getAdminSheet(e.parameter.sheet);
     } else if (action === "getRecords") {
-      result = getRecords(e.parameter.handler, e.parameter.isAdmin);
+      result = getRecords(
+        e.parameter.handler,
+        e.parameter.isAdmin,
+        e.parameter.startDate,
+        e.parameter.endDate,
+      );
     } else {
       result = { error: "unknown action: " + action };
     }
@@ -181,6 +186,9 @@ function doPost(e) {
     } else if (action === "deleteAdminRow") {
       deleteAdminRow(data.sheet, data.rowIndex);
       result = { status: "ok" };
+    } else if (action === "deleteAdminRows") {
+      deleteAdminRows(data.sheet, data.rowIndices);
+      result = { status: "ok" };
     } else if (action === "updateRecord") {
       updateRecord(data.rowIndex, data.rowData);
       result = { status: "ok" };
@@ -237,13 +245,31 @@ function deleteAdminRow(sheetKey, rowIndex) {
   sheet.deleteRow(rowIndex);
 }
 
+function deleteAdminRows(sheetKey, rowIndices) {
+  const sheet = SS.getSheetByName(SHEET_MAP[sheetKey]);
+  // 從下面往上刪，確保 index 不會跑掉
+  rowIndices.sort((a, b) => b - a);
+  rowIndices.forEach((idx) => {
+    sheet.deleteRow(idx);
+  });
+}
+
 // ──// 工作記錄寫入 ───────────────────────────────────────────────────
 
-function getRecords(handlerName, isAdmin) {
+function getRecords(handlerName, isAdmin, startDateStr, endDateStr) {
   const sheet = SS.getSheetByName("問題清單記錄");
   const all = sheet.getDataRange().getValues();
   if (all.length < 2) return [];
   const headers = all[0].map(String);
+
+  // Parse dates if provided
+  const startMs = startDateStr
+    ? new Date(startDateStr).setHours(0, 0, 0, 0)
+    : null;
+  const endMs = endDateStr
+    ? new Date(endDateStr).setHours(23, 59, 59, 999)
+    : null;
+
   return (
     all
       .slice(1)
@@ -255,10 +281,22 @@ function getRecords(handlerName, isAdmin) {
         return obj;
       })
       // isAdmin=true 則回傳全部，否則僅回傳該使用者記錄
-      .filter(
-        (obj) =>
-          isAdmin === "true" || String(obj["處理人員姓名"]) === handlerName,
-      )
+      .filter((obj) => {
+        const handlerMatch =
+          isAdmin === "true" || String(obj["處理人員姓名"]) === handlerName;
+        if (!handlerMatch) return false;
+
+        // 日期過濾 (依據發問日期)
+        if (startMs || endMs) {
+          const d = new Date(obj["發問日期"]);
+          if (!isNaN(d.getTime())) {
+            const time = d.getTime();
+            if (startMs && time < startMs) return false;
+            if (endMs && time > endMs) return false;
+          }
+        }
+        return true;
+      })
   );
 }
 
